@@ -1,0 +1,62 @@
+# Dependencies
+node_modules
+**/node_modules
+.pnpm-store
+
+# Build outputs
+dist/
+**/dist
+build/
+**/build
+
+# Git
+.git
+.gitignore
+
+# Environment
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+**/*.log
+npm-debug.log*
+
+# Testing
+coverage
+**/coverage
+.nyc_output
+
+# Prisma
+*.db
+*.db-journal
+**/*.db
+
+# RSA Keys
+**/keys/*.pem
+**/keys/*.key
+!**/keys/.gitkeep
+
+# Docker
+docker-compose.override.yml
+
+# Documentation
+*.md
+!README.md
+
+# Keep pnpm-lock.yaml - it's needed for Docker build
+!pnpm-lock.yaml

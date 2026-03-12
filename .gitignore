@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+.pnpm-store
+# Keep pnpm-lock.yaml - it's needed for Docker builds and CI/CD
+# pnpm-lock.yaml
+
+# Build outputs
+dist/
+
+# Testing
+coverage/
+*.log
+
+# Production
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Prisma
+*.db
+*.db-journal
+
+# RSA Keys
+*.pem
+*.key
+!*.example.key
+
+# Docker
+docker-compose.override.yml

@@ -1,0 +1,22 @@
+{
+  "name": "@app/messaging",
+  "version": "1.0.0",
+  "description": "RabbitMQ messaging module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "start:dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@nestjs/microservices": "^10.2.8",
+    "@nestjs/common": "^10.2.10",
+    "@nestjs/config": "^3.1.1",
+    "amqplib": "^0.10.3",
+    "amqp-connection-manager": "^4.1.14"
+  },
+  "devDependencies": {
+    "@types/amqplib": "^0.10.4",
+    "typescript": "^5.3.3"
+  }
+}
