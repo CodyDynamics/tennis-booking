@@ -6,8 +6,8 @@ import { UnauthorizedException, BadRequestException } from "@nestjs/common";
 import * as bcrypt from "bcrypt";
 
 import { AuthService } from "./auth.service";
-import { User } from "./entities/user.entity";
-import { Role } from "./entities/role.entity";
+import { User } from "../users/entities/user.entity";
+import { Role } from "../roles/entities/role.entity";
 import { PasswordResetToken } from "./entities/password-reset-token.entity";
 import { EmailService } from "../email/email.service";
 import { RegisterDto } from "./dto";
@@ -19,7 +19,13 @@ jest.mock("bcrypt", () => ({
 
 describe("AuthService", () => {
   let service: AuthService;
-  let userRepo: { find: jest.Mock; findOne: jest.Mock; save: jest.Mock; create: jest.Mock; update: jest.Mock };
+  let userRepo: {
+    find: jest.Mock;
+    findOne: jest.Mock;
+    save: jest.Mock;
+    create: jest.Mock;
+    update: jest.Mock;
+  };
   let roleRepo: { findOne: jest.Mock };
   let resetTokenRepo: {
     findOne: jest.Mock;
@@ -49,7 +55,9 @@ describe("AuthService", () => {
       find: jest.fn(),
       findOne: jest.fn(),
       save: jest.fn(),
-      create: jest.fn().mockImplementation((dto) => ({ ...dto, id: "new-user-id" })),
+      create: jest
+        .fn()
+        .mockImplementation((dto) => ({ ...dto, id: "new-user-id" })),
       update: jest.fn(),
     };
     roleRepo = { findOne: jest.fn() };
@@ -75,14 +83,19 @@ describe("AuthService", () => {
         return map[key];
       }),
     };
-    emailService = { sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined) };
+    emailService = {
+      sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: getRepositoryToken(User), useValue: userRepo },
         { provide: getRepositoryToken(Role), useValue: roleRepo },
-        { provide: getRepositoryToken(PasswordResetToken), useValue: resetTokenRepo },
+        {
+          provide: getRepositoryToken(PasswordResetToken),
+          useValue: resetTokenRepo,
+        },
         { provide: JwtService, useValue: jwtService },
         { provide: ConfigService, useValue: configService },
         { provide: EmailService, useValue: emailService },
@@ -107,7 +120,11 @@ describe("AuthService", () => {
 
     it("should register a new user and return user + tokens", async () => {
       userRepo.find.mockResolvedValue([]);
-      userRepo.save.mockResolvedValue({ ...mockUser, id: "new-id", email: registerDto.email });
+      userRepo.save.mockResolvedValue({
+        ...mockUser,
+        id: "new-id",
+        email: registerDto.email,
+      });
       userRepo.findOne.mockResolvedValue({
         ...mockUser,
         id: "new-id",
@@ -118,7 +135,9 @@ describe("AuthService", () => {
 
       const result = await service.register(registerDto);
 
-      expect(userRepo.find).toHaveBeenCalledWith({ where: { email: registerDto.email } });
+      expect(userRepo.find).toHaveBeenCalledWith({
+        where: { email: registerDto.email },
+      });
       expect(bcrypt.hash).toHaveBeenCalledWith(registerDto.password, 10);
       expect(userRepo.save).toHaveBeenCalled();
       expect(jwtService.signAsync).toHaveBeenCalledTimes(2);
@@ -130,8 +149,12 @@ describe("AuthService", () => {
     it("should throw BadRequestException when email already exists", async () => {
       userRepo.find.mockResolvedValue([{ ...mockUser, organizationId: null }]);
 
-      await expect(service.register(registerDto)).rejects.toThrow(BadRequestException);
-      await expect(service.register(registerDto)).rejects.toThrow("User with this email already exists");
+      await expect(service.register(registerDto)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.register(registerDto)).rejects.toThrow(
+        "User with this email already exists",
+      );
       expect(userRepo.save).not.toHaveBeenCalled();
     });
   });
@@ -151,7 +174,10 @@ describe("AuthService", () => {
     it("should return null when user not found", async () => {
       userRepo.findOne.mockResolvedValue(null);
 
-      const result = await service.validateUser("unknown@example.com", "password");
+      const result = await service.validateUser(
+        "unknown@example.com",
+        "password",
+      );
 
       expect(result).toBeNull();
     });
@@ -169,12 +195,12 @@ describe("AuthService", () => {
       userRepo.findOne.mockResolvedValue({ ...mockUser, status: "inactive" });
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
 
-      await expect(service.validateUser("test@example.com", "password")).rejects.toThrow(
-        UnauthorizedException,
-      );
-      await expect(service.validateUser("test@example.com", "password")).rejects.toThrow(
-        "Account is inactive",
-      );
+      await expect(
+        service.validateUser("test@example.com", "password"),
+      ).rejects.toThrow(UnauthorizedException);
+      await expect(
+        service.validateUser("test@example.com", "password"),
+      ).rejects.toThrow("Account is inactive");
     });
   });
 
@@ -210,7 +236,9 @@ describe("AuthService", () => {
       userRepo.findOne.mockResolvedValue(mockUser);
       resetTokenRepo.save.mockResolvedValue({});
 
-      const result = await service.forgotPassword({ email: "test@example.com" });
+      const result = await service.forgotPassword({
+        email: "test@example.com",
+      });
 
       expect(resetTokenRepo.save).toHaveBeenCalled();
       expect(emailService.sendPasswordResetEmail).toHaveBeenCalledWith(
@@ -223,7 +251,9 @@ describe("AuthService", () => {
     it("should return same message when user does not exist (no leak)", async () => {
       userRepo.findOne.mockResolvedValue(null);
 
-      const result = await service.forgotPassword({ email: "nonexistent@example.com" });
+      const result = await service.forgotPassword({
+        email: "nonexistent@example.com",
+      });
 
       expect(resetTokenRepo.save).not.toHaveBeenCalled();
       expect(emailService.sendPasswordResetEmail).not.toHaveBeenCalled();
@@ -249,8 +279,13 @@ describe("AuthService", () => {
       });
 
       expect(bcrypt.hash).toHaveBeenCalledWith("newpassword123", 10);
-      expect(userRepo.update).toHaveBeenCalledWith(mockUser.id, expect.any(Object));
-      expect(resetTokenRepo.update).toHaveBeenCalledWith(validToken.id, { used: true });
+      expect(userRepo.update).toHaveBeenCalledWith(
+        mockUser.id,
+        expect.any(Object),
+      );
+      expect(resetTokenRepo.update).toHaveBeenCalledWith(validToken.id, {
+        used: true,
+      });
       expect(result.message).toBe("Password reset successfully");
     });
 
@@ -258,10 +293,16 @@ describe("AuthService", () => {
       resetTokenRepo.findOne.mockResolvedValue(null);
 
       await expect(
-        service.resetPassword({ token: "bad-token", newPassword: "newpass123" }),
+        service.resetPassword({
+          token: "bad-token",
+          newPassword: "newpass123",
+        }),
       ).rejects.toThrow(BadRequestException);
       await expect(
-        service.resetPassword({ token: "bad-token", newPassword: "newpass123" }),
+        service.resetPassword({
+          token: "bad-token",
+          newPassword: "newpass123",
+        }),
       ).rejects.toThrow("Invalid or expired reset token");
     });
   });
@@ -282,8 +323,12 @@ describe("AuthService", () => {
         throw new Error("invalid");
       });
 
-      await expect(service.refreshToken("invalid-token")).rejects.toThrow(UnauthorizedException);
-      await expect(service.refreshToken("invalid-token")).rejects.toThrow("Invalid refresh token");
+      await expect(service.refreshToken("invalid-token")).rejects.toThrow(
+        UnauthorizedException,
+      );
+      await expect(service.refreshToken("invalid-token")).rejects.toThrow(
+        "Invalid refresh token",
+      );
     });
   });
 });

@@ -7,16 +7,16 @@ import { JwtStrategy } from "./strategies/jwt.strategy";
 import { LocalStrategy } from "./strategies/local.strategy";
 import { GoogleStrategy } from "./strategies/google.strategy";
 import { UsersModule } from "../users/users.module";
+import { RolesModule } from "../roles/roles.module";
 import { EmailModule } from "../email/email.module";
-import { User } from "./entities/user.entity";
-import { Role } from "./entities/role.entity";
 import { PasswordResetToken } from "./entities/password-reset-token.entity";
 
 @Module({
   imports: [
     PassportModule,
-    TypeOrmModule.forFeature([User, Role, PasswordResetToken]),
+    TypeOrmModule.forFeature([PasswordResetToken]),
     UsersModule,
+    RolesModule,
     EmailModule,
   ],
   controllers: [AuthController],

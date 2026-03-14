@@ -1,5 +1,6 @@
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
+import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { AppModule } from "./app.module";
 import { HttpExceptionFilter } from "@app/common";
 
@@ -22,9 +23,22 @@ async function bootstrap() {
     allowedHeaders: ["Content-Type", "Authorization"],
   });
 
+  const config = new DocumentBuilder()
+    .setTitle("Tennis Booking API")
+    .setDescription("API for court booking and tennis coaching system")
+    .setVersion("1.0")
+    .addBearerAuth(
+      { type: "http", scheme: "bearer", bearerFormat: "JWT", in: "header" },
+      "JWT",
+    )
+    .build();
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup("api", app, document);
+
   const port = process.env.PORT || process.env.GATEWAY_PORT || 3000;
   await app.listen(port);
   console.log(`🚀 API is running on: http://localhost:${port}`);
+  console.log(`📚 Swagger: http://localhost:${port}/api`);
 }
 
 bootstrap();

@@ -11,8 +11,8 @@ import * as bcrypt from "bcrypt";
 import * as crypto from "crypto";
 
 import { JwtPayload } from "@app/common";
-import { User } from "./entities/user.entity";
-import { Role } from "./entities/role.entity";
+import { User } from "../users/entities/user.entity";
+import { Role } from "../roles/entities/role.entity";
 import { PasswordResetToken } from "./entities/password-reset-token.entity";
 import {
   RegisterDto,
@@ -106,6 +106,7 @@ export class AuthService {
       throw new UnauthorizedException("Account is inactive");
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { passwordHash: _, ...result } = user;
     return result;
   }
@@ -134,7 +135,11 @@ export class AuthService {
     };
   }
 
-  async googleLogin(googleUser: { googleId: string; email: string; fullName: string }) {
+  async googleLogin(googleUser: {
+    googleId: string;
+    email: string;
+    fullName: string;
+  }) {
     const { googleId, email, fullName } = googleUser;
 
     let user = await this.userRepo
@@ -226,11 +231,7 @@ export class AuthService {
       relations: ["user"],
     });
 
-    if (
-      !resetToken ||
-      resetToken.used ||
-      resetToken.expiresAt < new Date()
-    ) {
+    if (!resetToken || resetToken.used || resetToken.expiresAt < new Date()) {
       throw new BadRequestException("Invalid or expired reset token");
     }
 

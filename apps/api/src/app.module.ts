@@ -10,9 +10,20 @@ import { RsaModule } from "./rsa/rsa.module";
 import { HealthModule } from "./health/health.module";
 import { DatabaseModule } from "./database/database.module";
 
-import { User } from "./auth/entities/user.entity";
-import { Role } from "./auth/entities/role.entity";
+import { User } from "./users/entities/user.entity";
+import { Role } from "./roles/entities/role.entity";
 import { PasswordResetToken } from "./auth/entities/password-reset-token.entity";
+import { Branch } from "./branches/entities/branch.entity";
+import { Court } from "./courts/entities/court.entity";
+import { Coach } from "./coaches/entities/coach.entity";
+import { CourtBooking } from "./bookings/entities/court-booking.entity";
+import { CoachSession } from "./bookings/entities/coach-session.entity";
+
+import { BranchesModule } from "./branches/branches.module";
+import { CourtsModule } from "./courts/courts.module";
+import { CoachesModule } from "./coaches/coaches.module";
+import { BookingsModule } from "./bookings/bookings.module";
+import { RolesModule } from "./roles/roles.module";
 
 @Module({
   imports: [
@@ -32,7 +43,16 @@ import { PasswordResetToken } from "./auth/entities/password-reset-token.entity"
         username: config.get<string>("DB_USER", "postgres"),
         password: config.get<string>("DB_PASS", "postgres"),
         database: config.get<string>("DB_NAME", "booking_tennis"),
-        entities: [User, Role, PasswordResetToken],
+        entities: [
+          User,
+          Role,
+          PasswordResetToken,
+          Branch,
+          Court,
+          Coach,
+          CourtBooking,
+          CoachSession,
+        ],
         synchronize: config.get<string>("NODE_ENV") !== "production",
         logging: config.get<string>("DB_LOGGING", "false") === "true",
       }),
@@ -67,6 +87,11 @@ import { PasswordResetToken } from "./auth/entities/password-reset-token.entity"
     UsersModule,
     RsaModule,
     HealthModule,
+    BranchesModule,
+    CourtsModule,
+    CoachesModule,
+    BookingsModule,
+    RolesModule,
   ],
   controllers: [],
   providers: [],

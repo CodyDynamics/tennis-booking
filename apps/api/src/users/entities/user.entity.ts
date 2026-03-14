@@ -5,12 +5,10 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
-  OneToMany,
   JoinColumn,
   Unique,
 } from "typeorm";
-import { Role } from "./role.entity";
-import { PasswordResetToken } from "./password-reset-token.entity";
+import { Role } from "../../roles/entities/role.entity";
 
 @Entity("users")
 @Unique(["organizationId", "email"])
@@ -54,10 +52,7 @@ export class User {
   @UpdateDateColumn()
   updatedAt: Date;
 
-  @ManyToOne(() => Role, (role) => role.users, { eager: true })
+  @ManyToOne(() => Role, { eager: true })
   @JoinColumn({ name: "roleId" })
   role: Role;
-
-  @OneToMany(() => PasswordResetToken, (token) => token.user)
-  passwordResetTokens: PasswordResetToken[];
 }
