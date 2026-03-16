@@ -1,4 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
+import { ConfigService } from "@nestjs/config";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import {
@@ -8,6 +9,25 @@ import {
   ResetPasswordDto,
   RefreshTokenDto,
 } from "./dto";
+
+const mockRes = () => {
+  const res: any = {};
+  res.cookie = jest.fn().mockReturnValue(res);
+  return res;
+};
+
+const mockConfigService = {
+  get: jest.fn((key: string, defaultValue?: unknown) => {
+    const map: Record<string, unknown> = {
+      "cookie.secure": false,
+      "cookie.accessTokenName": "access_token",
+      "cookie.refreshTokenName": "refresh_token",
+      "cookie.accessTokenMaxAgeSeconds": 3600,
+      "cookie.refreshTokenMaxAgeSeconds": 604800,
+    };
+    return map[key] ?? defaultValue;
+  }),
+};
 
 describe("AuthController", () => {
   let controller: AuthController;
@@ -29,6 +49,10 @@ describe("AuthController", () => {
         {
           provide: AuthService,
           useValue: mockAuthService,
+        },
+        {
+          provide: ConfigService,
+          useValue: mockConfigService,
         },
       ],
     }).compile();
@@ -56,7 +80,8 @@ describe("AuthController", () => {
         refreshToken: "y",
       });
 
-      await controller.register(dto);
+      const res = mockRes();
+      await controller.register(dto, res);
 
       expect(authService.register).toHaveBeenCalledWith(dto);
     });
@@ -74,7 +99,8 @@ describe("AuthController", () => {
         refreshToken: "y",
       });
 
-      await controller.login(dto);
+      const res = mockRes();
+      await controller.login(dto, res);
 
       expect(authService.login).toHaveBeenCalledWith(dto);
     });
@@ -93,7 +119,8 @@ describe("AuthController", () => {
         refreshToken: "y",
       });
 
-      await controller.googleAuthCallback({ user: googleUser } as any);
+      const res = mockRes();
+      await controller.googleAuthCallback({ user: googleUser } as any, res);
 
       expect(authService.googleLogin).toHaveBeenCalledWith(googleUser);
     });
@@ -129,9 +156,12 @@ describe("AuthController", () => {
       mockAuthService.refreshToken.mockResolvedValue({
         accessToken: "x",
         refreshToken: "y",
+        user: {},
       });
 
-      await controller.refresh(dto);
+      const req = { cookies: {} };
+      const res = mockRes();
+      await controller.refresh(dto, req, res);
 
       expect(authService.refreshToken).toHaveBeenCalledWith(dto.refreshToken);
     });

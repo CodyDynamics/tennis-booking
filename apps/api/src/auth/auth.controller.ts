@@ -5,11 +5,15 @@ import {
   UseGuards,
   Get,
   Req,
+  Res,
   HttpCode,
   HttpStatus,
+  UnauthorizedException,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { ApiTags, ApiOperation, ApiBody, ApiResponse } from "@nestjs/swagger";
+import { ConfigService } from "@nestjs/config";
+import { Response } from "express";
 import { Public } from "@app/common";
 import { AuthService } from "./auth.service";
 import {
@@ -21,10 +25,66 @@ import {
 } from "./dto";
 import { AuthResponseDto } from "./dto/auth-response.dto";
 
+const COOKIE_OPTS = {
+  httpOnly: true,
+  path: "/",
+  sameSite: "lax" as const,
+};
+
 @ApiTags("Auth")
 @Controller("auth")
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  private setAuthCookies(
+    res: Response,
+    accessToken: string,
+    refreshToken: string,
+  ) {
+    const secure = this.configService.get<boolean>("cookie.secure", false);
+    const accessName = this.configService.get<string>(
+      "cookie.accessTokenName",
+      "access_token",
+    );
+    const refreshName = this.configService.get<string>(
+      "cookie.refreshTokenName",
+      "refresh_token",
+    );
+    const accessMaxAge = this.configService.get<number>(
+      "cookie.accessTokenMaxAgeSeconds",
+      3600,
+    );
+    const refreshMaxAge = this.configService.get<number>(
+      "cookie.refreshTokenMaxAgeSeconds",
+      604800,
+    );
+    res.cookie(accessName, accessToken, {
+      ...COOKIE_OPTS,
+      secure,
+      maxAge: accessMaxAge * 1000,
+    });
+    res.cookie(refreshName, refreshToken, {
+      ...COOKIE_OPTS,
+      secure,
+      maxAge: refreshMaxAge * 1000,
+    });
+  }
+
+  private clearAuthCookies(res: Response) {
+    const accessName = this.configService.get<string>(
+      "cookie.accessTokenName",
+      "access_token",
+    );
+    const refreshName = this.configService.get<string>(
+      "cookie.refreshTokenName",
+      "refresh_token",
+    );
+    res.cookie(accessName, "", { ...COOKIE_OPTS, maxAge: 0 });
+    res.cookie(refreshName, "", { ...COOKIE_OPTS, maxAge: 0 });
+  }
 
   @Post("register")
   @Public()
@@ -40,8 +100,13 @@ export class AuthController {
     status: 400,
     description: "Invalid data or email already exists",
   })
-  async register(@Body() registerDto: RegisterDto) {
-    return this.authService.register(registerDto);
+  async register(
+    @Body() registerDto: RegisterDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.register(registerDto);
+    this.setAuthCookies(res, result.accessToken, result.refreshToken);
+    return { user: result.user };
   }
 
   @Post("login")
@@ -55,8 +120,13 @@ export class AuthController {
     type: AuthResponseDto,
   })
   @ApiResponse({ status: 401, description: "Invalid email or password" })
-  async login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+  async login(
+    @Body() loginDto: LoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.login(loginDto);
+    this.setAuthCookies(res, result.accessToken, result.refreshToken);
+    return { user: result.user };
   }
 
   @Get("google")
@@ -77,8 +147,23 @@ export class AuthController {
     description: "Login successful",
     type: AuthResponseDto,
   })
-  async googleAuthCallback(@Req() req) {
-    return this.authService.googleLogin(req.user);
+  async googleAuthCallback(
+    @Req() req,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.googleLogin(req.user);
+    this.setAuthCookies(res, result.accessToken, result.refreshToken);
+    return { user: result.user };
+  }
+
+  @Post("logout")
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Logout and clear auth cookies" })
+  @ApiResponse({ status: 200, description: "Cookies cleared" })
+  logout(@Res({ passthrough: true }) res: Response) {
+    this.clearAuthCookies(res);
+    return { message: "Logged out" };
   }
 
   @Post("forgot-password")
@@ -113,7 +198,21 @@ export class AuthController {
     type: AuthResponseDto,
   })
   @ApiResponse({ status: 401, description: "Invalid refresh token" })
-  async refresh(@Body() refreshTokenDto: RefreshTokenDto) {
-    return this.authService.refreshToken(refreshTokenDto.refreshToken);
+  async refresh(
+    @Body() refreshTokenDto: RefreshTokenDto,
+    @Req() req: { cookies?: { refresh_token?: string } },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const refreshName = this.configService.get<string>(
+      "cookie.refreshTokenName",
+      "refresh_token",
+    );
+    const token = req.cookies?.[refreshName] ?? refreshTokenDto?.refreshToken;
+    if (!token) {
+      throw new UnauthorizedException("Refresh token required");
+    }
+    const result = await this.authService.refreshToken(token);
+    this.setAuthCookies(res, result.accessToken, result.refreshToken);
+    return { user: result.user };
   }
 }

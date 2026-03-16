@@ -21,7 +21,7 @@ import {
 import { CourtsService } from "./courts.service";
 import { CreateCourtDto } from "./dto/create-court.dto";
 import { UpdateCourtDto } from "./dto/update-court.dto";
-import { JwtAuthGuard } from "@app/common";
+import { JwtAuthGuard, PermissionsGuard, RequirePermission } from "@app/common";
 
 @ApiTags("Courts")
 @Controller("courts")
@@ -29,26 +29,30 @@ export class CourtsController {
   constructor(private readonly courtsService: CourtsService) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission("courts:create")
   @ApiBearerAuth("JWT")
   @ApiOperation({ summary: "Create court" })
   @ApiBody({ type: CreateCourtDto })
   @ApiResponse({ status: 201, description: "Court created" })
   @ApiResponse({ status: 400, description: "Invalid data" })
+  @ApiResponse({ status: 403, description: "Forbidden - missing courts:create permission" })
   create(@Body() dto: CreateCourtDto) {
     return this.courtsService.create(dto);
   }
 
   @Get()
-  @ApiOperation({ summary: "List courts (filter by branchId, status)" })
+  @ApiOperation({ summary: "List courts (filter by branchId, status, search)" })
   @ApiQuery({ name: "branchId", required: false })
   @ApiQuery({ name: "status", required: false, enum: ["active", "maintenance"] })
+  @ApiQuery({ name: "search", required: false, description: "Search by court name" })
   @ApiResponse({ status: 200, description: "Array of courts" })
   findAll(
     @Query("branchId") branchId?: string,
     @Query("status") status?: string,
+    @Query("search") search?: string,
   ) {
-    return this.courtsService.findAll(branchId, status);
+    return this.courtsService.findAll(branchId, status, search);
   }
 
   @Get(":id")
@@ -61,22 +65,26 @@ export class CourtsController {
   }
 
   @Patch(":id")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission("courts:update")
   @ApiBearerAuth("JWT")
   @ApiOperation({ summary: "Update court" })
   @ApiParam({ name: "id" })
   @ApiBody({ type: UpdateCourtDto })
   @ApiResponse({ status: 200, description: "Update successful" })
+  @ApiResponse({ status: 403, description: "Forbidden - missing courts:update permission" })
   update(@Param("id") id: string, @Body() dto: UpdateCourtDto) {
     return this.courtsService.update(id, dto);
   }
 
   @Delete(":id")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission("courts:delete")
   @ApiBearerAuth("JWT")
   @ApiOperation({ summary: "Delete court" })
   @ApiParam({ name: "id" })
   @ApiResponse({ status: 200, description: "Delete successful" })
+  @ApiResponse({ status: 403, description: "Forbidden - missing courts:delete permission" })
   remove(@Param("id") id: string) {
     return this.courtsService.remove(id);
   }

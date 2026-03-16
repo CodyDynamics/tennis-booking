@@ -23,4 +23,12 @@ export class RolesService {
   async findByName(name: string) {
     return this.roleRepo.findOne({ where: { name } });
   }
+
+  async updatePermissions(id: string, permissionCodes: string[]) {
+    const role = await this.roleRepo.findOne({ where: { id } });
+    if (!role) throw new NotFoundException("Role not found");
+    const value = (permissionCodes ?? []).filter(Boolean).join(",");
+    await this.roleRepo.update(id, { permissions: value });
+    return this.findOne(id);
+  }
 }

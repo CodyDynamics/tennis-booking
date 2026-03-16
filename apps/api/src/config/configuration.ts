@@ -17,6 +17,15 @@ export default () => ({
     refreshSecret: process.env.JWT_REFRESH_SECRET || "your-refresh-secret-key",
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || "7d",
   },
+  cookie: {
+    accessTokenName: process.env.COOKIE_ACCESS_TOKEN_NAME || "access_token",
+    refreshTokenName: process.env.COOKIE_REFRESH_TOKEN_NAME || "refresh_token",
+    accessTokenMaxAgeSeconds: 60 * 60, // 1h, match jwt.expiresIn
+    refreshTokenMaxAgeSeconds: 7 * 24 * 60 * 60, // 7d
+    sameSite:
+      (process.env.COOKIE_SAME_SITE as "lax" | "strict" | "none") || "lax",
+    secure: process.env.NODE_ENV === "production",
+  },
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,

@@ -4,6 +4,7 @@ import { ExtractJwt, Strategy } from "passport-jwt";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
+import { Request } from "express";
 import { JwtPayload } from "@app/common";
 import { User } from "../../users/entities/user.entity";
 
@@ -15,7 +16,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private userRepo: Repository<User>,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        (req: Request) => {
+          const name = configService.get<string>("cookie.accessTokenName", "access_token");
+          return req?.cookies?.[name] ?? null;
+        },
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+      ]),
       ignoreExpiration: false,
       secretOrKey: configService.get<string>("jwt.secret"),
     });
@@ -31,6 +38,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException("User not found or inactive");
     }
 
+    const permissions: string[] = user.role?.permissions
+      ? String(user.role.permissions)
+          .split(",")
+          .map((p) => p.trim())
+          .filter(Boolean)
+      : [];
+
     return {
       id: user.id,
       email: user.email,
@@ -38,6 +52,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       branchId: user.branchId,
       roleId: user.roleId,
       role: user.role.name,
+      permissions,
     };
   }
 }

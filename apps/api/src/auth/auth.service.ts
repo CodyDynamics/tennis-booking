@@ -257,12 +257,21 @@ export class AuthService {
         throw new UnauthorizedException("User not found or inactive");
       }
 
-      return this.generateTokens(
+      const tokens = await this.generateTokens(
         user.id,
         user.email,
         user.organizationId ?? undefined,
         user.roleId,
       );
+      return {
+        ...tokens,
+        user: {
+          id: user.id,
+          email: user.email,
+          fullName: user.fullName,
+          role: user.role.name,
+        },
+      };
     } catch {
       throw new UnauthorizedException("Invalid refresh token");
     }
