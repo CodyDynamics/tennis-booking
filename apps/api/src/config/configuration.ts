@@ -29,13 +29,10 @@ export default () => ({
         | "none"
         | undefined;
       if (env) return env;
-      // Cross-origin (e.g. frontend on Vercel, backend on Render): need SameSite=None for cookies to be sent
-      const frontendUrl = process.env.FRONTEND_URL || "";
-      const isCrossOrigin =
-        process.env.NODE_ENV === "production" &&
-        frontendUrl &&
-        !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i.test(frontendUrl);
-      return isCrossOrigin ? "none" : "lax";
+      // Production: default SameSite=None so cookies are sent cross-origin (e.g. frontend Vercel, backend Render).
+      // Set COOKIE_SAME_SITE=lax only if frontend and backend are same origin.
+      if (process.env.NODE_ENV === "production") return "none";
+      return "lax";
     })(),
     secure: process.env.NODE_ENV === "production",
   },

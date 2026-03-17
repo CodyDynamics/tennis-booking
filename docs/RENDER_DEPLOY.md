@@ -18,8 +18,10 @@ Script `build:render` chạy `NODE_ENV=development pnpm install` (cài cả devD
 
 Giữ **NODE_ENV=production** (cho runtime). Thêm các biến cần thiết, ví dụ:
 
-- `FRONTEND_URL` = `https://tennis-booking-frontend-red.vercel.app` (để cookie SameSite=None cho cross-origin)
+- `FRONTEND_URL` = `https://tennis-booking-frontend-red.vercel.app` (dùng cho CORS và redirect)
 - `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, v.v.
+
+**Cookie cross-origin:** Ở production backend mặc định set cookie với **SameSite=None** và **Secure** để trình duyệt gửi cookie khi frontend (Vercel) và backend (Render) khác origin. Nếu vẫn bị 401 sau F5, user cần **đăng xuất và đăng nhập lại một lần** để nhận cookie mới.
 
 ## Root Directory
 
