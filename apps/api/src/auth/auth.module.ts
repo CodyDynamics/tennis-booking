@@ -11,6 +11,10 @@ import { RolesModule } from "../roles/roles.module";
 import { EmailModule } from "../email/email.module";
 import { PasswordResetToken } from "./entities/password-reset-token.entity";
 
+const googleStrategyProvider = process.env.GOOGLE_CLIENT_ID
+  ? [GoogleStrategy]
+  : [];
+
 @Module({
   imports: [
     PassportModule,
@@ -20,7 +24,7 @@ import { PasswordResetToken } from "./entities/password-reset-token.entity";
     EmailModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, LocalStrategy, GoogleStrategy],
+  providers: [AuthService, JwtStrategy, LocalStrategy, ...googleStrategyProvider],
   exports: [AuthService],
 })
 export class AuthModule {}

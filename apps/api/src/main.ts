@@ -21,6 +21,7 @@ async function bootstrap() {
   const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
   const allowedOrigins = [
     frontendUrl,
+    "https://tennis-booking-frontend-red.vercel.app",
     "http://localhost:3000",
     "http://localhost:3001",
     "http://localhost:3002",
@@ -31,8 +32,11 @@ async function bootstrap() {
 
   app.enableCors({
     origin: (origin, callback) => {
-      const allow = !origin || allowedOrigins.includes(origin) ||
-        (process.env.NODE_ENV !== "production" && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin));
+      const allow =
+        !origin ||
+        allowedOrigins.includes(origin) ||
+        (process.env.NODE_ENV !== "production" &&
+          /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin));
       callback(null, allow ? origin || true : false);
     },
     credentials: true,
