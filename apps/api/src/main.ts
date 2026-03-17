@@ -60,8 +60,12 @@ async function bootstrap() {
 
   const port = process.env.PORT || process.env.GATEWAY_PORT || 3000;
   await app.listen(port);
-  console.log(`🚀 API is running on: http://localhost:${port}`);
-  console.log(`📚 Swagger: http://localhost:${port}/api`);
+  const isProduction = process.env.NODE_ENV === "production";
+  const baseUrl = isProduction ? `port ${port}` : `http://localhost:${port}`;
+  console.log(`🚀 API is running on: ${baseUrl}`);
+  if (!isProduction) {
+    console.log(`📚 Swagger: http://localhost:${port}/api`);
+  }
 }
 
 bootstrap();
