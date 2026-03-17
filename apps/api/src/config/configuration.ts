@@ -22,8 +22,21 @@ export default () => ({
     refreshTokenName: process.env.COOKIE_REFRESH_TOKEN_NAME || "refresh_token",
     accessTokenMaxAgeSeconds: 60 * 60, // 1h, match jwt.expiresIn
     refreshTokenMaxAgeSeconds: 7 * 24 * 60 * 60, // 7d
-    sameSite:
-      (process.env.COOKIE_SAME_SITE as "lax" | "strict" | "none") || "lax",
+    sameSite: (() => {
+      const env = process.env.COOKIE_SAME_SITE as
+        | "lax"
+        | "strict"
+        | "none"
+        | undefined;
+      if (env) return env;
+      // Cross-origin (e.g. frontend on Vercel, backend on Render): need SameSite=None for cookies to be sent
+      const frontendUrl = process.env.FRONTEND_URL || "";
+      const isCrossOrigin =
+        process.env.NODE_ENV === "production" &&
+        frontendUrl &&
+        !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i.test(frontendUrl);
+      return isCrossOrigin ? "none" : "lax";
+    })(),
     secure: process.env.NODE_ENV === "production",
   },
   google: {

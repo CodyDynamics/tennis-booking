@@ -25,12 +25,6 @@ import {
 } from "./dto";
 import { AuthResponseDto } from "./dto/auth-response.dto";
 
-const COOKIE_OPTS = {
-  httpOnly: true,
-  path: "/",
-  sameSite: "lax" as const,
-};
-
 @ApiTags("Auth")
 @Controller("auth")
 export class AuthController {
@@ -39,11 +33,24 @@ export class AuthController {
     private readonly configService: ConfigService,
   ) {}
 
+  private getCookieOpts() {
+    const sameSite = this.configService.get<"lax" | "strict" | "none">(
+      "cookie.sameSite",
+      "lax",
+    );
+    return {
+      httpOnly: true,
+      path: "/",
+      sameSite: sameSite as "lax" | "strict" | "none",
+    };
+  }
+
   private setAuthCookies(
     res: Response,
     accessToken: string,
     refreshToken: string,
   ) {
+    const opts = this.getCookieOpts();
     const secure = this.configService.get<boolean>("cookie.secure", false);
     const accessName = this.configService.get<string>(
       "cookie.accessTokenName",
@@ -62,18 +69,20 @@ export class AuthController {
       604800,
     );
     res.cookie(accessName, accessToken, {
-      ...COOKIE_OPTS,
+      ...opts,
       secure,
       maxAge: accessMaxAge * 1000,
     });
     res.cookie(refreshName, refreshToken, {
-      ...COOKIE_OPTS,
+      ...opts,
       secure,
       maxAge: refreshMaxAge * 1000,
     });
   }
 
   private clearAuthCookies(res: Response) {
+    const opts = this.getCookieOpts();
+    const secure = this.configService.get<boolean>("cookie.secure", false);
     const accessName = this.configService.get<string>(
       "cookie.accessTokenName",
       "access_token",
@@ -82,8 +91,8 @@ export class AuthController {
       "cookie.refreshTokenName",
       "refresh_token",
     );
-    res.cookie(accessName, "", { ...COOKIE_OPTS, maxAge: 0 });
-    res.cookie(refreshName, "", { ...COOKIE_OPTS, maxAge: 0 });
+    res.cookie(accessName, "", { ...opts, secure, maxAge: 0 });
+    res.cookie(refreshName, "", { ...opts, secure, maxAge: 0 });
   }
 
   @Post("register")
