@@ -1,14 +1,19 @@
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
-import cookieParser from "cookie-parser";
+import * as cookieParser from "cookie-parser";
 import { Request, Response, NextFunction } from "express";
 import { AppModule } from "./app.module";
 import { HttpExceptionFilter } from "@app/common";
 
+// cookie-parser is CommonJS; default import breaks on Render (.default is not a function)
+const cookieParserMiddleware =
+  (cookieParser as { default?: () => void }).default ??
+  (cookieParser as unknown as () => void);
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.use(cookieParser());
+  app.use(cookieParserMiddleware());
 
   // Log every request so Render/production logs show incoming traffic
   app.use((req: Request, res: Response, next: NextFunction) => {
