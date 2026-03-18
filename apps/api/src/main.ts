@@ -1,13 +1,25 @@
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
-import * as cookieParser from "cookie-parser";
+import cookieParser from "cookie-parser";
+import { Request, Response, NextFunction } from "express";
 import { AppModule } from "./app.module";
 import { HttpExceptionFilter } from "@app/common";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.use(cookieParser());
+
+  // Log every request so Render/production logs show incoming traffic
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const start = Date.now();
+    res.on("finish", () => {
+      const duration = Date.now() - start;
+      const status = res.statusCode;
+      console.log(`${req.method} ${req.url} ${status} ${duration}ms`);
+    });
+    next();
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({

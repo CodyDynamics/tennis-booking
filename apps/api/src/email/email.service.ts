@@ -16,6 +16,9 @@ export class EmailService {
         user: this.configService.get<string>("email.user"),
         pass: this.configService.get<string>("email.password"),
       },
+      // Avoid long hangs on Render/production when SMTP is slow or blocked
+      connectionTimeout: 15_000,
+      greetingTimeout: 10_000,
     });
   }
 

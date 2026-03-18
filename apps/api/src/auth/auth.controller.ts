@@ -85,6 +85,20 @@ export class AuthController {
     });
   }
 
+  @Get("config")
+  @Public()
+  @ApiOperation({
+    summary: "Public auth config (e.g. whether OTP login is enabled)",
+  })
+  @ApiResponse({ status: 200, description: "Auth config" })
+  getConfig() {
+    const loginOtpEnabled = this.configService.get<boolean>(
+      "auth.loginOtpEnabled",
+      true,
+    );
+    return { loginOtpEnabled };
+  }
+
   private clearAuthCookies(res: Response) {
     const opts = this.getCookieOpts();
     const secure = this.configService.get<boolean>("cookie.secure", false);
@@ -126,7 +140,9 @@ export class AuthController {
   @Post("request-login-otp")
   @Public()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Validate password and send OTP to email for login" })
+  @ApiOperation({
+    summary: "Validate password and send OTP to email for login",
+  })
   @ApiBody({ type: RequestLoginOtpDto })
   @ApiResponse({ status: 200, description: "OTP sent to email" })
   @ApiResponse({ status: 401, description: "Invalid email or password" })

@@ -2,6 +2,8 @@ import {
   Injectable,
   UnauthorizedException,
   BadRequestException,
+  ServiceUnavailableException,
+  Logger,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
@@ -25,6 +27,8 @@ import { OtpStoreService } from "./otp-store.service";
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @InjectRepository(User)
     private userRepo: Repository<User>,
@@ -266,7 +270,17 @@ export class AuthService {
       .toString()
       .padStart(length, "0");
     this.otpStore.set(user.email, otp);
-    await this.emailService.sendLoginOtpEmail(user.email, otp);
+    try {
+      await this.emailService.sendLoginOtpEmail(user.email, otp);
+    } catch (err) {
+      this.logger.error(
+        `Send OTP email failed for ${user.email}: ${err instanceof Error ? err.message : String(err)}`,
+        err instanceof Error ? err.stack : undefined,
+      );
+      throw new ServiceUnavailableException(
+        "Unable to send verification email. Please try again later or contact support.",
+      );
+    }
     return {
       message: "OTP sent to your email. Please enter it to sign in.",
     };

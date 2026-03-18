@@ -21,10 +21,30 @@ Nếu muốn tắt auto-sync để tránh thay đổi schema khi đổi entity:
 - Xóa biến `DB_SYNC` hoặc đặt `DB_SYNC=false`, rồi deploy lại.  
 - Lưu ý: từ lúc đó nếu bạn thêm/sửa entity, cần tự tạo và chạy migration (hoặc tạm bật lại `DB_SYNC=true` cho một lần deploy).
 
+## Lỗi 500 trên `/auth/request-login-otp` (OTP gửi chậm / không gửi được)
+
+Trên Render, request OTP có thể **rất chậm** hoặc **500** vì:
+
+1. **Gửi email (Gmail SMTP)** – Render có thể chặn hoặc throttle kết nối ra cổng 587. Gmail có thể timeout hoặc từ chối.
+2. **Không thấy log** – Sau khi thêm middleware, mỗi request sẽ in ra log dạng `POST /auth/request-login-otp 500 15234ms`. Nếu vẫn không thấy gì thì request chưa tới backend (kiểm tra URL API trên frontend, CORS, hoặc Render chưa nhận traffic).
+
+**Đã xử lý trong code:**
+
+- Timeout SMTP 15s (connection) + 10s (greeting) để tránh treo lâu.
+- Bắt lỗi gửi email, ghi log chi tiết và trả **503** với message rõ ràng thay vì 500 chung chung.
+- Middleware log mỗi request (method, path, status, duration) để dễ debug trên Render Logs.
+
+**Bạn cần làm:**
+
+- Trên Render → **Environment**: cấu hình đủ `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASSWORD`, `EMAIL_FROM` (dùng Gmail App Password, xem `docs/EMAIL_SETUP.md`).
+- Mở **Logs** của Web Service trên Render: khi login bạn sẽ thấy dòng `POST /auth/request-login-otp ...`. Nếu lỗi gửi email sẽ có dòng `[AuthService] Send OTP email failed for ...` kèm nguyên nhân (timeout, ECONNREFUSED, auth failed, v.v.).
+- Nếu Render chặn SMTP: cân nhắc dùng dịch vụ email khác (SendGrid, Mailgun, Resend) hỗ trợ tốt trên cloud, hoặc dùng Gmail qua relay có hỗ trợ.
+
 ## Biến môi trường cần thiết trên Render
 
 - `NODE_ENV=production`
 - `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASS`, `DB_NAME` (lấy từ Render Postgres)
 - `JWT_SECRET`, `JWT_REFRESH_SECRET` (đặt giá trị bí mật)
 - `DB_SYNC=true` (cho lần deploy đầu để tạo bảng)
-- Các biến khác: `FRONTEND_URL`, `EMAIL_*`, v.v. theo nhu cầu.
+- **Email (để gửi OTP):** `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASSWORD`, `EMAIL_FROM`
+- Các biến khác: `FRONTEND_URL` (URL frontend Vercel để CORS), v.v.

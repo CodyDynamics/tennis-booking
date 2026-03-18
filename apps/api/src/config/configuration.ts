@@ -36,6 +36,10 @@ export default () => ({
     })(),
     secure: process.env.NODE_ENV === "production",
   },
+  auth: {
+    /** When "true" or unset: login requires OTP. When "false": normal login (email + password only, no OTP). */
+    loginOtpEnabled: process.env.LOGIN_OTP_ENABLED !== "false",
+  },
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
