@@ -1,28 +1,30 @@
 # Deploy Backend lên Render.com
 
-## Build Command
+## Lỗi `relation "sports" does not exist`
 
-Khi `NODE_ENV=production`, pnpm sẽ **bỏ qua devDependencies** (trong đó có `@nestjs/cli`). Script `nest build` cần Nest CLI nên build sẽ lỗi `nest: not found`.
+Trên production (Render), app tắt **TypeORM synchronize** nên không tự tạo bảng. Database Postgres trên Render mới tạo sẽ trống → khi SeedService chạy (hoặc API gọi bảng `sports`) sẽ báo lỗi **relation "sports" does not exist**.
 
-**Cách xử lý:** Dùng script build cài đủ devDependencies rồi mới build:
+## Cách xử lý: Bật sync cho lần deploy đầu
 
-- **Build Command:** `pnpm run build:render`
+1. Vào **Render Dashboard** → chọn **Web Service** (backend) → **Environment**.
+2. Thêm biến môi trường:
+   - **Key:** `DB_SYNC`
+   - **Value:** `true`
+3. **Save** và **Deploy** lại (hoặc đợi redeploy).
 
-Script `build:render` chạy `NODE_ENV=development pnpm install` (cài cả devDependencies) rồi `pnpm run build`. Ở bước **Start**, Render vẫn dùng `NODE_ENV=production` từ Environment nên app chạy đúng môi trường production.
+Sau khi deploy xong, TypeORM sẽ tạo toàn bộ bảng (users, roles, sports, courts, …) và SeedService chạy seed dữ liệu mặc định.
 
-## Start Command
+### Sau lần chạy đầu (tùy chọn)
 
-- **Start Command:** `node dist/apps/api/src/main`
+Nếu muốn tắt auto-sync để tránh thay đổi schema khi đổi entity:
 
-## Environment (Render Dashboard)
+- Xóa biến `DB_SYNC` hoặc đặt `DB_SYNC=false`, rồi deploy lại.  
+- Lưu ý: từ lúc đó nếu bạn thêm/sửa entity, cần tự tạo và chạy migration (hoặc tạm bật lại `DB_SYNC=true` cho một lần deploy).
 
-Giữ **NODE_ENV=production** (cho runtime). Thêm các biến cần thiết, ví dụ:
+## Biến môi trường cần thiết trên Render
 
-- `FRONTEND_URL` = `https://tennis-booking-frontend-red.vercel.app` (dùng cho CORS và redirect)
-- `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, v.v.
-
-**Cookie cross-origin:** Ở production backend mặc định set cookie với **SameSite=None** và **Secure** để trình duyệt gửi cookie khi frontend (Vercel) và backend (Render) khác origin. Nếu vẫn bị 401 sau F5, user cần **đăng xuất và đăng nhập lại một lần** để nhận cookie mới.
-
-## Root Directory
-
-Nếu repo có cả frontend: đặt **Root Directory** = `backend`.
+- `NODE_ENV=production`
+- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASS`, `DB_NAME` (lấy từ Render Postgres)
+- `JWT_SECRET`, `JWT_REFRESH_SECRET` (đặt giá trị bí mật)
+- `DB_SYNC=true` (cho lần deploy đầu để tạo bảng)
+- Các biến khác: `FRONTEND_URL`, `EMAIL_*`, v.v. theo nhu cầu.

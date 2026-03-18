@@ -61,7 +61,10 @@ import { SportsModule } from "./sports/sports.module";
           CourtBooking,
           CoachSession,
         ],
-        synchronize: config.get<string>("NODE_ENV") !== "production",
+        // On Render/production, set DB_SYNC=true so TypeORM creates tables (no migrations yet). Can set DB_SYNC=false after first deploy.
+        synchronize:
+          config.get<string>("DB_SYNC") === "true" ||
+          config.get<string>("NODE_ENV") !== "production",
         logging: config.get<string>("DB_LOGGING", "false") === "true",
       }),
       inject: [ConfigService],
