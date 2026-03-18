@@ -20,12 +20,18 @@ export class CourtsService {
     return this.courtRepo.save(court);
   }
 
-  async findAll(locationId?: string, status?: string, search?: string, sport?: string) {
-    const qb = this.courtRepo.createQueryBuilder("court").leftJoinAndSelect(
-      "court.location",
-      "location",
-    );
+  async findAll(
+    locationId?: string,
+    branchId?: string,
+    status?: string,
+    search?: string,
+    sport?: string,
+  ) {
+    const qb = this.courtRepo
+      .createQueryBuilder("court")
+      .leftJoinAndSelect("court.location", "location");
     if (locationId) qb.andWhere("court.locationId = :locationId", { locationId });
+    if (branchId) qb.andWhere("location.branchId = :branchId", { branchId });
     if (status) qb.andWhere("court.status = :status", { status });
     if (sport) qb.andWhere("court.sport = :sport", { sport });
     if (search && search.trim()) {

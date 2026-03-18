@@ -6,14 +6,20 @@ import { Organization } from "../organizations/entities/organization.entity";
 import { Branch } from "../branches/entities/branch.entity";
 import { Location } from "../locations/entities/location.entity";
 import { Court } from "../courts/entities/court.entity";
+import { Sport } from "../sports/entities/sport.entity";
+import { getAllPermissionCodes } from "../roles/permissions.constants";
 
 const DEFAULT_ROLES = [
-  { name: "admin", description: "System administrator" },
+  { name: "super_admin", description: "Full system access; only this role has all permissions by default", permissions: "" },
+  { name: "admin", description: "Administrator (permissions assigned by super_admin)" },
   { name: "player", description: "Casual player who can book courts" },
-  { name: "coach", description: "Tennis coach" },
+  { name: "coach", description: "Tennis / Pickleball coach" },
   { name: "student", description: "Student" },
   { name: "parent", description: "Parent" },
 ];
+
+const TENNIS_IMAGE = "https://images.unsplash.com/photo-1554068865-24cecd4e34b8?w=800";
+const PICKLEBALL_IMAGE = "https://images.unsplash.com/photo-1622163642998-1ea32a664d18?w=800";
 
 @Injectable()
 export class SeedService implements OnModuleInit {
@@ -28,19 +34,45 @@ export class SeedService implements OnModuleInit {
     private locationRepo: Repository<Location>,
     @InjectRepository(Court)
     private courtRepo: Repository<Court>,
+    @InjectRepository(Sport)
+    private sportRepo: Repository<Sport>,
   ) {}
 
   async onModuleInit() {
     await this.seedRoles();
+    await this.seedSportsTable();
     await this.seedSportsData();
   }
 
   private async seedRoles() {
+    const allPermissions = getAllPermissionCodes();
     for (const r of DEFAULT_ROLES) {
       const existing = await this.roleRepo.findOne({ where: { name: r.name } });
       if (!existing) {
-        await this.roleRepo.save(this.roleRepo.create(r));
+        const permissions =
+          r.name === "super_admin" ? allPermissions.join(",") : (r as { permissions?: string }).permissions ?? "";
+        await this.roleRepo.save(
+          this.roleRepo.create({
+            name: r.name,
+            description: r.description,
+            permissions: permissions || null,
+          })
+        );
         console.log(`[SeedService] Created role: ${r.name}`);
+      }
+    }
+  }
+
+  private async seedSportsTable() {
+    const sportsData = [
+      { code: "tennis", name: "Tennis", description: "Tennis courts", imageUrl: TENNIS_IMAGE },
+      { code: "pickleball", name: "Pickleball", description: "Pickleball courts", imageUrl: PICKLEBALL_IMAGE },
+    ];
+    for (const s of sportsData) {
+      const existing = await this.sportRepo.findOne({ where: { code: s.code } });
+      if (!existing) {
+        await this.sportRepo.save(this.sportRepo.create(s));
+        console.log(`[SeedService] Created sport: ${s.name}`);
       }
     }
   }
@@ -91,7 +123,6 @@ export class SeedService implements OnModuleInit {
         // 4. Courts
         const courtsToCreate = [];
         if (location.name.includes("Tennis")) {
-          // Add Tennis Courts
           for (let i = 1; i <= 4; i++) {
             courtsToCreate.push({
               locationId: location.id,
@@ -100,10 +131,10 @@ export class SeedService implements OnModuleInit {
               type: "outdoor",
               pricePerHour: "20.00",
               description: "Premium Hard Court",
+              imageUrl: TENNIS_IMAGE,
             });
           }
         } else {
-          // Add Pickleball Courts
           for (let i = 1; i <= 4; i++) {
             courtsToCreate.push({
               locationId: location.id,
@@ -112,6 +143,7 @@ export class SeedService implements OnModuleInit {
               type: "indoor",
               pricePerHour: "15.00",
               description: "Indoor Pro Court",
+              imageUrl: PICKLEBALL_IMAGE,
             });
           }
         }

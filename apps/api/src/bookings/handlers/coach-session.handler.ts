@@ -56,7 +56,6 @@ export class CoachSessionHandler implements IBookingHandler {
     const [sh, sm] = startTime.split(":").map(Number);
     const startMin = sh * 60 + sm;
     const endMin = startMin + durationMinutes;
-    const endTime = `${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}`;
 
     const overlapping = await this.coachSessionRepo
       .createQueryBuilder("s")
@@ -77,7 +76,6 @@ export class CoachSessionHandler implements IBookingHandler {
 
   async create(params: CreateBookingParams): Promise<CreateBookingResult> {
     const p = params as CoachSessionCreateParams;
-    const coach = await this.coachesService.findOne(p.coachId);
 
     const available = await this.isCoachAvailable(
       p.coachId,

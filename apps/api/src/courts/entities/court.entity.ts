@@ -32,6 +32,9 @@ export class Court {
   @Column({ type: "text", nullable: true })
   description: string | null;
 
+  @Column({ type: "varchar", nullable: true })
+  imageUrl: string | null;
+
   @Column({ default: "active" })
   status: string; // active | maintenance
 

@@ -47,6 +47,16 @@ export class AuthService {
       roleId,
     } = registerDto;
 
+    const role = await this.roleRepo.findOne({ where: { id: roleId } });
+    if (!role) {
+      throw new BadRequestException("Invalid role");
+    }
+    if (role.name === "admin" || role.name === "super_admin") {
+      throw new BadRequestException(
+      "Registration with admin or super_admin role is not allowed",
+    );
+    }
+
     const byEmail = await this.userRepo.find({ where: { email } });
     const existingUser = byEmail.find(
       (u) => (organizationId || null) === (u.organizationId || null),

@@ -22,7 +22,7 @@ export class PermissionsGuard implements CanActivate {
     const user = request.user as { role?: string; permissions?: string[] } | undefined;
     if (!user) throw new ForbiddenException("Not authenticated");
 
-    if (user.role === "admin") return true;
+    if (user.role === "super_admin") return true;
     const hasPermission = user.permissions?.includes(required) ?? false;
     if (!hasPermission) {
       throw new ForbiddenException(`Missing permission: ${required}`);

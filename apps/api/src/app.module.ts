@@ -17,6 +17,7 @@ import { Branch } from "./branches/entities/branch.entity";
 import { Organization } from "./organizations/entities/organization.entity";
 import { Location } from "./locations/entities/location.entity";
 import { Court } from "./courts/entities/court.entity";
+import { Sport } from "./sports/entities/sport.entity";
 import { Coach } from "./coaches/entities/coach.entity";
 import { CourtBooking } from "./bookings/entities/court-booking.entity";
 import { CoachSession } from "./bookings/entities/coach-session.entity";
@@ -27,6 +28,7 @@ import { CoachesModule } from "./coaches/coaches.module";
 import { BookingsModule } from "./bookings/bookings.module";
 import { RolesModule } from "./roles/roles.module";
 import { OrganizationsModule } from "./organizations/organizations.module";
+import { SportsModule } from "./sports/sports.module";
 
 @Module({
   imports: [
@@ -54,6 +56,7 @@ import { OrganizationsModule } from "./organizations/organizations.module";
           Organization,
           Location,
           Court,
+          Sport,
           Coach,
           CourtBooking,
           CoachSession,
@@ -98,6 +101,7 @@ import { OrganizationsModule } from "./organizations/organizations.module";
     BookingsModule,
     RolesModule,
     OrganizationsModule,
+    SportsModule,
   ],
   controllers: [],
   providers: [],

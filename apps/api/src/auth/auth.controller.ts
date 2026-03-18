@@ -45,10 +45,12 @@ export class AuthController {
     };
   }
 
+  /** Default: access 1h, refresh 7d. When rememberMe: true, refresh 30 days. */
   private setAuthCookies(
     res: Response,
     accessToken: string,
     refreshToken: string,
+    rememberMe?: boolean,
   ) {
     const opts = this.getCookieOpts();
     const secure = this.configService.get<boolean>("cookie.secure", false);
@@ -64,10 +66,11 @@ export class AuthController {
       "cookie.accessTokenMaxAgeSeconds",
       3600,
     );
-    const refreshMaxAge = this.configService.get<number>(
+    const defaultRefreshMaxAge = this.configService.get<number>(
       "cookie.refreshTokenMaxAgeSeconds",
       604800,
     );
+    const refreshMaxAge = rememberMe ? 30 * 24 * 60 * 60 : defaultRefreshMaxAge;
     res.cookie(accessName, accessToken, {
       ...opts,
       secure,
@@ -134,7 +137,12 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.login(loginDto);
-    this.setAuthCookies(res, result.accessToken, result.refreshToken);
+    this.setAuthCookies(
+      res,
+      result.accessToken,
+      result.refreshToken,
+      loginDto.rememberMe,
+    );
     return { user: result.user };
   }
 
