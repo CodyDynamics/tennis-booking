@@ -2,9 +2,9 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { IsString, IsOptional, IsNumber, IsIn, Min } from "class-validator";
 
 export class CreateCourtDto {
-  @ApiProperty({ description: "Branch UUID" })
+  @ApiProperty({ description: "Location UUID" })
   @IsString()
-  branchId: string;
+  locationId: string;
 
   @ApiProperty({ example: "Court 1", description: "Court name" })
   @IsString()
@@ -14,6 +14,11 @@ export class CreateCourtDto {
   @IsOptional()
   @IsIn(["indoor", "outdoor"])
   type?: string;
+
+  @ApiPropertyOptional({ enum: ["tennis", "pickleball"], default: "tennis" })
+  @IsOptional()
+  @IsIn(["tennis", "pickleball"])
+  sport?: string;
 
   @ApiPropertyOptional({ example: 200000, minimum: 0, description: "Price per hour" })
   @IsOptional()

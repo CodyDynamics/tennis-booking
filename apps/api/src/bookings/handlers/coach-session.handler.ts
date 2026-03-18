@@ -50,7 +50,9 @@ export class CoachSessionHandler implements IBookingHandler {
     excludeSessionId?: string,
   ): Promise<boolean> {
     const dateStr =
-      date instanceof Date ? date.toISOString().slice(0, 10) : String(date).slice(0, 10);
+      date instanceof Date
+        ? date.toISOString().slice(0, 10)
+        : String(date).slice(0, 10);
     const [sh, sm] = startTime.split(":").map(Number);
     const startMin = sh * 60 + sm;
     const endMin = startMin + durationMinutes;
@@ -94,7 +96,7 @@ export class CoachSessionHandler implements IBookingHandler {
     if (p.courtId) {
       const court = await this.courtsService.findOne(p.courtId);
       courtId = court.id;
-      branchId = court.branchId;
+      branchId = court.location?.branchId ?? null;
     }
 
     const session = this.coachSessionRepo.create({
@@ -106,7 +108,8 @@ export class CoachSessionHandler implements IBookingHandler {
       sessionDate: new Date(p.sessionDate),
       startTime: p.startTime,
       durationMinutes: p.durationMinutes,
-      sessionType: (p.sessionType as CoachSessionType) ?? CoachSessionType.PRIVATE,
+      sessionType:
+        (p.sessionType as CoachSessionType) ?? CoachSessionType.PRIVATE,
       status: CoachSessionStatus.SCHEDULED,
     });
 

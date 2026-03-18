@@ -14,6 +14,8 @@ import { User } from "./users/entities/user.entity";
 import { Role } from "./roles/entities/role.entity";
 import { PasswordResetToken } from "./auth/entities/password-reset-token.entity";
 import { Branch } from "./branches/entities/branch.entity";
+import { Organization } from "./organizations/entities/organization.entity";
+import { Location } from "./locations/entities/location.entity";
 import { Court } from "./courts/entities/court.entity";
 import { Coach } from "./coaches/entities/coach.entity";
 import { CourtBooking } from "./bookings/entities/court-booking.entity";
@@ -24,6 +26,7 @@ import { CourtsModule } from "./courts/courts.module";
 import { CoachesModule } from "./coaches/coaches.module";
 import { BookingsModule } from "./bookings/bookings.module";
 import { RolesModule } from "./roles/roles.module";
+import { OrganizationsModule } from "./organizations/organizations.module";
 
 @Module({
   imports: [
@@ -48,6 +51,8 @@ import { RolesModule } from "./roles/roles.module";
           Role,
           PasswordResetToken,
           Branch,
+          Organization,
+          Location,
           Court,
           Coach,
           CourtBooking,
@@ -92,6 +97,7 @@ import { RolesModule } from "./roles/roles.module";
     CoachesModule,
     BookingsModule,
     RolesModule,
+    OrganizationsModule,
   ],
   controllers: [],
   providers: [],
