@@ -42,17 +42,21 @@ export class CourtsController {
   }
 
   @Get()
-  @ApiOperation({ summary: "List courts (filter by branchId, status, search)" })
-  @ApiQuery({ name: "branchId", required: false })
+  @ApiOperation({ summary: "List courts (filter by locationId, branchId, status, search, sport)" })
+  @ApiQuery({ name: "locationId", required: false })
+  @ApiQuery({ name: "branchId", required: false, description: "Filter by branch (courts in locations of this branch)" })
   @ApiQuery({ name: "status", required: false, enum: ["active", "maintenance"] })
   @ApiQuery({ name: "search", required: false, description: "Search by court name" })
+  @ApiQuery({ name: "sport", required: false, enum: ["tennis", "pickleball"] })
   @ApiResponse({ status: 200, description: "Array of courts" })
   findAll(
+    @Query("locationId") locationId?: string,
     @Query("branchId") branchId?: string,
     @Query("status") status?: string,
     @Query("search") search?: string,
+    @Query("sport") sport?: string,
   ) {
-    return this.courtsService.findAll(branchId, status, search);
+    return this.courtsService.findAll(locationId, branchId, status, search, sport);
   }
 
   @Get(":id")

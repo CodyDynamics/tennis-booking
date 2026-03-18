@@ -1,27 +1,25 @@
 import {
-  Injectable,
   BadRequestException,
-  NotFoundException,
   ForbiddenException,
+  Injectable,
+  NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
+import { CoachesService } from "../../coaches/coaches.service";
+import { CourtsService } from "../../courts/courts.service";
 import {
   CourtBooking,
-  CourtBookingType,
   CourtBookingStatus,
+  CourtBookingType,
   PaymentStatus,
 } from "../entities/court-booking.entity";
-import { Court } from "../../courts/entities/court.entity";
-import { Coach } from "../../coaches/entities/coach.entity";
 import {
-  IBookingHandler,
+  BookingKind,
   CreateBookingParams,
   CreateBookingResult,
-  BookingKind,
+  IBookingHandler,
 } from "../interfaces/booking-handler.interface";
-import { CourtsService } from "../../courts/courts.service";
-import { CoachesService } from "../../coaches/coaches.service";
 
 export interface CourtBookingCreateParams extends CreateBookingParams {
   courtId: string;
@@ -63,7 +61,9 @@ export class CourtBookingHandler implements IBookingHandler {
     excludeBookingId?: string,
   ): Promise<boolean> {
     const dateStr =
-      date instanceof Date ? date.toISOString().slice(0, 10) : String(date).slice(0, 10);
+      date instanceof Date
+        ? date.toISOString().slice(0, 10)
+        : String(date).slice(0, 10);
     const qb = this.courtBookingRepo
       .createQueryBuilder("b")
       .where("b.courtId = :courtId", { courtId })
@@ -150,7 +150,7 @@ export class CourtBookingHandler implements IBookingHandler {
 
     const booking = this.courtBookingRepo.create({
       organizationId: p.organizationId ?? null,
-      branchId: p.branchId ?? court.branchId,
+      branchId: p.branchId ?? court.location?.branchId ?? null,
       courtId: p.courtId,
       userId: p.userId,
       coachId,

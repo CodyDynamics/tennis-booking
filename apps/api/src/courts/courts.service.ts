@@ -20,13 +20,20 @@ export class CourtsService {
     return this.courtRepo.save(court);
   }
 
-  async findAll(branchId?: string, status?: string, search?: string) {
-    const qb = this.courtRepo.createQueryBuilder("court").leftJoinAndSelect(
-      "court.branch",
-      "branch",
-    );
-    if (branchId) qb.andWhere("court.branchId = :branchId", { branchId });
+  async findAll(
+    locationId?: string,
+    branchId?: string,
+    status?: string,
+    search?: string,
+    sport?: string,
+  ) {
+    const qb = this.courtRepo
+      .createQueryBuilder("court")
+      .leftJoinAndSelect("court.location", "location");
+    if (locationId) qb.andWhere("court.locationId = :locationId", { locationId });
+    if (branchId) qb.andWhere("location.branchId = :branchId", { branchId });
     if (status) qb.andWhere("court.status = :status", { status });
+    if (sport) qb.andWhere("court.sport = :sport", { sport });
     if (search && search.trim()) {
       qb.andWhere("LOWER(court.name) LIKE :q", {
         q: `%${search.trim().toLowerCase()}%`,
@@ -38,7 +45,7 @@ export class CourtsService {
   async findOne(id: string) {
     const court = await this.courtRepo.findOne({
       where: { id },
-      relations: { branch: true },
+      relations: { location: true },
     });
     if (!court) throw new NotFoundException("Court not found");
     return court;

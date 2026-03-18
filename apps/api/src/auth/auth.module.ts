@@ -6,6 +6,7 @@ import { AuthController } from "./auth.controller";
 import { JwtStrategy } from "./strategies/jwt.strategy";
 import { LocalStrategy } from "./strategies/local.strategy";
 import { GoogleStrategy } from "./strategies/google.strategy";
+import { OtpStoreService } from "./otp-store.service";
 import { UsersModule } from "../users/users.module";
 import { RolesModule } from "../roles/roles.module";
 import { EmailModule } from "../email/email.module";
@@ -24,7 +25,7 @@ const googleStrategyProvider = process.env.GOOGLE_CLIENT_ID
     EmailModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, LocalStrategy, ...googleStrategyProvider],
+  providers: [AuthService, OtpStoreService, JwtStrategy, LocalStrategy, ...googleStrategyProvider],
   exports: [AuthService],
 })
 export class AuthModule {}

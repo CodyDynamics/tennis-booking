@@ -21,6 +21,7 @@ import {
   ResetPasswordDto,
 } from "./dto";
 import { EmailService } from "../email/email.service";
+import { OtpStoreService } from "./otp-store.service";
 
 @Injectable()
 export class AuthService {
@@ -34,6 +35,7 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private emailService: EmailService,
+    private otpStore: OtpStoreService,
   ) {}
 
   async register(registerDto: RegisterDto) {
@@ -46,6 +48,16 @@ export class AuthService {
       branchId,
       roleId,
     } = registerDto;
+
+    const role = await this.roleRepo.findOne({ where: { id: roleId } });
+    if (!role) {
+      throw new BadRequestException("Invalid role");
+    }
+    if (role.name === "admin" || role.name === "super_admin") {
+      throw new BadRequestException(
+        "Registration with admin or super_admin role is not allowed",
+      );
+    }
 
     const byEmail = await this.userRepo.find({ where: { email } });
     const existingUser = byEmail.find(
@@ -240,6 +252,53 @@ export class AuthService {
     await this.resetTokenRepo.update(resetToken.id, { used: true });
 
     return { message: "Password reset successfully" };
+  }
+
+  /** Validate password then send 6-digit OTP to email for second-step verification. */
+  async requestLoginOtp(email: string, password: string) {
+    const user = await this.validateUser(email, password);
+    if (!user) {
+      throw new UnauthorizedException("Invalid credentials");
+    }
+    const length = this.configService.get<number>("otp.loginLength", 6);
+    const otp = crypto
+      .randomInt(10 ** (length - 1), 10 ** length)
+      .toString()
+      .padStart(length, "0");
+    this.otpStore.set(user.email, otp);
+    await this.emailService.sendLoginOtpEmail(user.email, otp);
+    return {
+      message: "OTP sent to your email. Please enter it to sign in.",
+    };
+  }
+
+  /** Verify OTP and return tokens (login). */
+  async verifyLoginOtp(email: string, otp: string) {
+    const user = await this.userRepo.findOne({
+      where: { email: email.trim().toLowerCase() },
+      relations: ["role"],
+    });
+    if (!user || user.status !== "active") {
+      throw new UnauthorizedException("Invalid or expired OTP");
+    }
+    if (!this.otpStore.consume(user.email, otp)) {
+      throw new UnauthorizedException("Invalid or expired OTP");
+    }
+    const tokens = await this.generateTokens(
+      user.id,
+      user.email,
+      user.organizationId ?? undefined,
+      user.roleId,
+    );
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role.name,
+      },
+      ...tokens,
+    };
   }
 
   async refreshToken(refreshToken: string) {

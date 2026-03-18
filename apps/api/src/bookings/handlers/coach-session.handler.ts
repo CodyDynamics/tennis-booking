@@ -50,11 +50,12 @@ export class CoachSessionHandler implements IBookingHandler {
     excludeSessionId?: string,
   ): Promise<boolean> {
     const dateStr =
-      date instanceof Date ? date.toISOString().slice(0, 10) : String(date).slice(0, 10);
+      date instanceof Date
+        ? date.toISOString().slice(0, 10)
+        : String(date).slice(0, 10);
     const [sh, sm] = startTime.split(":").map(Number);
     const startMin = sh * 60 + sm;
     const endMin = startMin + durationMinutes;
-    const endTime = `${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}`;
 
     const overlapping = await this.coachSessionRepo
       .createQueryBuilder("s")
@@ -75,7 +76,6 @@ export class CoachSessionHandler implements IBookingHandler {
 
   async create(params: CreateBookingParams): Promise<CreateBookingResult> {
     const p = params as CoachSessionCreateParams;
-    const coach = await this.coachesService.findOne(p.coachId);
 
     const available = await this.isCoachAvailable(
       p.coachId,
@@ -94,7 +94,7 @@ export class CoachSessionHandler implements IBookingHandler {
     if (p.courtId) {
       const court = await this.courtsService.findOne(p.courtId);
       courtId = court.id;
-      branchId = court.branchId;
+      branchId = court.location?.branchId ?? null;
     }
 
     const session = this.coachSessionRepo.create({
@@ -106,7 +106,8 @@ export class CoachSessionHandler implements IBookingHandler {
       sessionDate: new Date(p.sessionDate),
       startTime: p.startTime,
       durationMinutes: p.durationMinutes,
-      sessionType: (p.sessionType as CoachSessionType) ?? CoachSessionType.PRIVATE,
+      sessionType:
+        (p.sessionType as CoachSessionType) ?? CoachSessionType.PRIVATE,
       status: CoachSessionStatus.SCHEDULED,
     });
 

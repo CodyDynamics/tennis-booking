@@ -22,6 +22,8 @@ import {
   ForgotPasswordDto,
   ResetPasswordDto,
   RefreshTokenDto,
+  RequestLoginOtpDto,
+  VerifyLoginOtpDto,
 } from "./dto";
 import { AuthResponseDto } from "./dto/auth-response.dto";
 
@@ -45,10 +47,12 @@ export class AuthController {
     };
   }
 
+  /** Default: access 1h, refresh 7d. When rememberMe: true, refresh 30 days. */
   private setAuthCookies(
     res: Response,
     accessToken: string,
     refreshToken: string,
+    rememberMe?: boolean,
   ) {
     const opts = this.getCookieOpts();
     const secure = this.configService.get<boolean>("cookie.secure", false);
@@ -64,10 +68,11 @@ export class AuthController {
       "cookie.accessTokenMaxAgeSeconds",
       3600,
     );
-    const refreshMaxAge = this.configService.get<number>(
+    const defaultRefreshMaxAge = this.configService.get<number>(
       "cookie.refreshTokenMaxAgeSeconds",
       604800,
     );
+    const refreshMaxAge = rememberMe ? 30 * 24 * 60 * 60 : defaultRefreshMaxAge;
     res.cookie(accessName, accessToken, {
       ...opts,
       secure,
@@ -118,10 +123,46 @@ export class AuthController {
     return { user: result.user };
   }
 
+  @Post("request-login-otp")
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Validate password and send OTP to email for login" })
+  @ApiBody({ type: RequestLoginOtpDto })
+  @ApiResponse({ status: 200, description: "OTP sent to email" })
+  @ApiResponse({ status: 401, description: "Invalid email or password" })
+  async requestLoginOtp(@Body() dto: RequestLoginOtpDto) {
+    return this.authService.requestLoginOtp(dto.email, dto.password);
+  }
+
+  @Post("verify-login-otp")
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Verify OTP and login" })
+  @ApiBody({ type: VerifyLoginOtpDto })
+  @ApiResponse({
+    status: 200,
+    description: "Login successful",
+    type: AuthResponseDto,
+  })
+  @ApiResponse({ status: 401, description: "Invalid or expired OTP" })
+  async verifyLoginOtp(
+    @Body() dto: VerifyLoginOtpDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.verifyLoginOtp(dto.email, dto.otp);
+    this.setAuthCookies(
+      res,
+      result.accessToken,
+      result.refreshToken,
+      dto.rememberMe,
+    );
+    return { user: result.user };
+  }
+
   @Post("login")
   @Public()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Login" })
+  @ApiOperation({ summary: "Login with password" })
   @ApiBody({ type: LoginDto })
   @ApiResponse({
     status: 200,
@@ -134,7 +175,12 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.login(loginDto);
-    this.setAuthCookies(res, result.accessToken, result.refreshToken);
+    this.setAuthCookies(
+      res,
+      result.accessToken,
+      result.refreshToken,
+      loginDto.rememberMe,
+    );
     return { user: result.user };
   }
 
