@@ -22,6 +22,8 @@ import {
   ForgotPasswordDto,
   ResetPasswordDto,
   RefreshTokenDto,
+  RequestLoginOtpDto,
+  VerifyLoginOtpDto,
 } from "./dto";
 import { AuthResponseDto } from "./dto/auth-response.dto";
 
@@ -121,10 +123,46 @@ export class AuthController {
     return { user: result.user };
   }
 
+  @Post("request-login-otp")
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Validate password and send OTP to email for login" })
+  @ApiBody({ type: RequestLoginOtpDto })
+  @ApiResponse({ status: 200, description: "OTP sent to email" })
+  @ApiResponse({ status: 401, description: "Invalid email or password" })
+  async requestLoginOtp(@Body() dto: RequestLoginOtpDto) {
+    return this.authService.requestLoginOtp(dto.email, dto.password);
+  }
+
+  @Post("verify-login-otp")
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Verify OTP and login" })
+  @ApiBody({ type: VerifyLoginOtpDto })
+  @ApiResponse({
+    status: 200,
+    description: "Login successful",
+    type: AuthResponseDto,
+  })
+  @ApiResponse({ status: 401, description: "Invalid or expired OTP" })
+  async verifyLoginOtp(
+    @Body() dto: VerifyLoginOtpDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.verifyLoginOtp(dto.email, dto.otp);
+    this.setAuthCookies(
+      res,
+      result.accessToken,
+      result.refreshToken,
+      dto.rememberMe,
+    );
+    return { user: result.user };
+  }
+
   @Post("login")
   @Public()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Login" })
+  @ApiOperation({ summary: "Login with password" })
   @ApiBody({ type: LoginDto })
   @ApiResponse({
     status: 200,

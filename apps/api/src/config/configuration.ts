@@ -55,6 +55,12 @@ export default () => ({
     password: process.env.EMAIL_PASSWORD,
     from: process.env.EMAIL_FROM || "noreply@booking-tennis.com",
   },
+  otp: {
+    /** Login OTP expiry in seconds (default 5 min) */
+    loginTtlSeconds: parseInt(process.env.OTP_LOGIN_TTL_SECONDS || "300", 10),
+    /** Login OTP length (digits) */
+    loginLength: parseInt(process.env.OTP_LOGIN_LENGTH || "6", 10),
+  },
   rsa: {
     publicKeyPath:
       process.env.RSA_PUBLIC_KEY_PATH ||
