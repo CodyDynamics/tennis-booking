@@ -15,6 +15,10 @@ import {
   PaymentStatus,
 } from "../entities/court-booking.entity";
 import {
+  CoachSession,
+  CoachSessionStatus,
+} from "../entities/coach-session.entity";
+import {
   BookingKind,
   CreateBookingParams,
   CreateBookingResult,
@@ -37,6 +41,8 @@ export class CourtBookingHandler implements IBookingHandler {
   constructor(
     @InjectRepository(CourtBooking)
     private readonly courtBookingRepo: Repository<CourtBooking>,
+    @InjectRepository(CoachSession)
+    private readonly coachSessionRepo: Repository<CoachSession>,
     private readonly courtsService: CourtsService,
     private readonly coachesService: CoachesService,
   ) {}
@@ -52,18 +58,20 @@ export class CourtBookingHandler implements IBookingHandler {
     return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
   }
 
-  /** Check if court is free for given slot (no overlapping pending/confirmed). */
+  /** Check if court is free for given slot (no overlapping pending/confirmed bookings or coach sessions on this court). */
   async isCourtAvailable(
     courtId: string,
-    date: Date,
+    bookingDate: Date | string,
     startTime: string,
     endTime: string,
     excludeBookingId?: string,
   ): Promise<boolean> {
     const dateStr =
-      date instanceof Date
-        ? date.toISOString().slice(0, 10)
-        : String(date).slice(0, 10);
+      typeof bookingDate === "string"
+        ? bookingDate.slice(0, 10)
+        : bookingDate instanceof Date
+          ? bookingDate.toISOString().slice(0, 10)
+          : String(bookingDate).slice(0, 10);
     const qb = this.courtBookingRepo
       .createQueryBuilder("b")
       .where("b.courtId = :courtId", { courtId })
@@ -79,7 +87,31 @@ export class CourtBookingHandler implements IBookingHandler {
       qb.andWhere("b.id != :excludeId", { excludeId: excludeBookingId });
     }
     const count = await qb.getCount();
-    return count === 0;
+    if (count > 0) {
+      return false;
+    }
+
+    /** Coach sessions that reserve this court must block the same wall-clock slot. */
+    const sessions = await this.coachSessionRepo
+      .createQueryBuilder("s")
+      .where("s.courtId = :courtId", { courtId })
+      .andWhere("s.sessionDate = :date", { date: dateStr })
+      .andWhere("s.status = :status", {
+        status: CoachSessionStatus.SCHEDULED,
+      })
+      .getMany();
+
+    const bStart = this.parseTimeToMinutes(startTime);
+    const bEnd = this.parseTimeToMinutes(endTime);
+    for (const s of sessions) {
+      const sStart = this.parseTimeToMinutes(s.startTime);
+      const sEnd = sStart + s.durationMinutes;
+      if (sStart < bEnd && sEnd > bStart) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   /** Get available time slots for a court on a date. */
@@ -99,12 +131,7 @@ export class CourtBookingHandler implements IBookingHandler {
     while (min + slotMinutes <= endMin) {
       const start = this.formatTime(min);
       const end = this.formatTime(min + slotMinutes);
-      const available = await this.isCourtAvailable(
-        courtId,
-        new Date(date),
-        start,
-        end,
-      );
+      const available = await this.isCourtAvailable(courtId, date, start, end);
       if (available) slots.push({ start, end });
       min += slotMinutes;
     }
@@ -127,7 +154,7 @@ export class CourtBookingHandler implements IBookingHandler {
 
     const available = await this.isCourtAvailable(
       p.courtId,
-      new Date(p.bookingDate),
+      p.bookingDate,
       p.startTime,
       p.endTime,
     );
