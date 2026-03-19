@@ -40,6 +40,15 @@ Trên Render, request OTP có thể **rất chậm** hoặc **500** vì:
 - Mở **Logs** của Web Service trên Render: khi login bạn sẽ thấy dòng `POST /auth/request-login-otp ...`. Nếu lỗi gửi email sẽ có dòng `[AuthService] Send OTP email failed for ...` kèm nguyên nhân (timeout, ECONNREFUSED, auth failed, v.v.).
 - Nếu Render chặn SMTP: cân nhắc dùng dịch vụ email khác (SendGrid, Mailgun, Resend) hỗ trợ tốt trên cloud, hoặc dùng Gmail qua relay có hỗ trợ.
 
+### Lỗi 503 "Unable to send verification email"
+
+Backend trả **503** khi không gửi được email OTP (đúng nghĩa "service unavailable"). **Đổi sang 403 hay mã khác không làm email gửi được** – cần xử lý nguyên nhân (SMTP trên Render bị chặn/timeout).
+
+**Cách dùng tạm khi chưa cấu hình email ổn trên Render:**
+
+- Trên Render → **Environment** thêm: **`LOGIN_OTP_ENABLED`** = **`false`**.
+- Deploy lại → login sẽ **không** qua OTP (chỉ email + password), không cần gửi email. Khi nào đã cấu hình xong email (hoặc dùng SendGrid/Resend), đặt `LOGIN_OTP_ENABLED=true` để bật lại OTP.
+
 ## Biến môi trường cần thiết trên Render
 
 - `NODE_ENV=production`
@@ -47,4 +56,5 @@ Trên Render, request OTP có thể **rất chậm** hoặc **500** vì:
 - `JWT_SECRET`, `JWT_REFRESH_SECRET` (đặt giá trị bí mật)
 - `DB_SYNC=true` (cho lần deploy đầu để tạo bảng)
 - **Email (để gửi OTP):** `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASSWORD`, `EMAIL_FROM`
+- **Tùy chọn:** `LOGIN_OTP_ENABLED=false` để tắt login OTP (chỉ login bằng email + password) khi chưa gửi email được trên Render.
 - Các biến khác: `FRONTEND_URL` (URL frontend Vercel để CORS), v.v.
