@@ -31,6 +31,20 @@ export class CreateCourtDto {
   @IsString()
   description?: string;
 
+  @ApiPropertyOptional({ description: "Main image URL" })
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  @ApiPropertyOptional({ description: "JSON array of image URLs for gallery" })
+  @IsOptional()
+  imageGallery?: string;
+
+  @ApiPropertyOptional({ description: "Google Maps embed URL" })
+  @IsOptional()
+  @IsString()
+  mapEmbedUrl?: string;
+
   @ApiPropertyOptional({ enum: ["active", "maintenance"], default: "active" })
   @IsOptional()
   @IsIn(["active", "maintenance"])

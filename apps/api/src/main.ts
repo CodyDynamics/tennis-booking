@@ -5,6 +5,7 @@ import * as cookieParser from "cookie-parser";
 import { Request, Response, NextFunction } from "express";
 import { AppModule } from "./app.module";
 import { HttpExceptionFilter } from "@app/common";
+import { SeedService } from "./database/seed.service";
 
 // cookie-parser is CommonJS; default import breaks on Render (.default is not a function)
 const cookieParserMiddleware =
@@ -13,6 +14,8 @@ const cookieParserMiddleware =
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  // Force SeedService to run (it is not injected elsewhere, so would never be created)
+  await app.get(SeedService);
   app.use(cookieParserMiddleware());
 
   // Log every request so Render/production logs show incoming traffic

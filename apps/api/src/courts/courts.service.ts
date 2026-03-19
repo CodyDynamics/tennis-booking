@@ -16,6 +16,8 @@ export class CourtsService {
     const court = this.courtRepo.create({
       ...dto,
       pricePerHour: String(dto.pricePerHour ?? 0),
+      imageGallery: dto.imageGallery ?? null,
+      mapEmbedUrl: dto.mapEmbedUrl ?? null,
     });
     return this.courtRepo.save(court);
   }
@@ -58,6 +60,8 @@ export class CourtsService {
       ...(dto.pricePerHour !== undefined && {
         pricePerHour: String(dto.pricePerHour),
       }),
+      ...(dto.imageGallery !== undefined && { imageGallery: dto.imageGallery }),
+      ...(dto.mapEmbedUrl !== undefined && { mapEmbedUrl: dto.mapEmbedUrl }),
     });
     return this.findOne(id);
   }

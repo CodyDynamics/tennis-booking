@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 import {
@@ -13,6 +14,7 @@ import {
   ApiOperation,
   ApiBody,
   ApiParam,
+  ApiQuery,
   ApiResponse,
   ApiBearerAuth,
 } from "@nestjs/swagger";
@@ -38,10 +40,11 @@ export class CoachesController {
   }
 
   @Get()
-  @ApiOperation({ summary: "List coaches" })
+  @ApiOperation({ summary: "List coaches (optional filter by branchId)" })
+  @ApiQuery({ name: "branchId", required: false, description: "Filter coaches by branch" })
   @ApiResponse({ status: 200, description: "Array of coaches" })
-  findAll() {
-    return this.coachesService.findAll();
+  findAll(@Query("branchId") branchId?: string) {
+    return this.coachesService.findAll(branchId);
   }
 
   @Get(":id")

@@ -20,11 +20,15 @@ export class CoachesService {
     return this.coachRepo.save(coach);
   }
 
-  async findAll() {
-    return this.coachRepo.find({
-      relations: { user: true },
-      order: { createdAt: "DESC" },
-    });
+  async findAll(branchId?: string) {
+    const qb = this.coachRepo
+      .createQueryBuilder("coach")
+      .leftJoinAndSelect("coach.user", "user")
+      .orderBy("coach.createdAt", "DESC");
+    if (branchId) {
+      qb.andWhere("user.branchId = :branchId", { branchId });
+    }
+    return qb.getMany();
   }
 
   async findOne(id: string) {

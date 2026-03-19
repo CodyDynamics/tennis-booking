@@ -35,6 +35,14 @@ export class Court {
   @Column({ type: "varchar", nullable: true })
   imageUrl: string | null;
 
+  /** JSON array of image URLs for gallery */
+  @Column({ type: "text", nullable: true })
+  imageGallery: string | null;
+
+  /** Google Maps embed URL or iframe src for location map */
+  @Column({ type: "text", nullable: true })
+  mapEmbedUrl: string | null;
+
   @Column({ default: "active" })
   status: string; // active | maintenance
 
