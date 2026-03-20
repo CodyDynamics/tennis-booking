@@ -79,8 +79,10 @@ export class SeedService implements OnModuleInit {
       await this.seedRoles();
       await this.seedSportsTable();
       await this.seedSportsData();
+      await this.ensureLocationMapMetadata();
       await this.updateCourtsWithImages();
       await this.seedCoaches();
+      await this.assignCoachCourtAffiliations();
       console.log("[SeedService] Seed finished.");
     } catch (err) {
       console.error("[SeedService] Seed failed:", err);
@@ -167,7 +169,10 @@ export class SeedService implements OnModuleInit {
 
     // 3. Locations
     const locationsData = [
-      { name: "Oak Creek Tennis Center", address: "2531 Oak Creek Dr." },
+      {
+        name: "DEF Tennis Center",
+        address: "4714 Baldwin St, Dallas, TX 75210",
+      },
       { name: "Downtown Pickleball Club", address: "100 Main St." },
     ];
 
@@ -441,9 +446,28 @@ export class SeedService implements OnModuleInit {
     ];
     /* eslint-enable prettier/prettier */
 
+    /** 20 additional coaches: directory only (no court); password same as legacy. */
+    const freeCoachUsers = Array.from({ length: 20 }, (_, i) => {
+      const n = 21 + i;
+      return {
+        email: `coach${n}@codyreserve.com`,
+        fullName: `Independent Pro ${n}`,
+        bio: "Independent coach (seed). Listed on the public coach directory; not tied to a single court.",
+        hourlyRate: `${40 + (i % 12)}.00`,
+        avatarUrl: TENNIS_IMAGES[i % TENNIS_IMAGES.length],
+      };
+    });
+
     const passwordHash = await bcrypt.hash("Password123!", 10);
 
-    for (const c of coachUsers) {
+    const upsertCoachUser = async (c: {
+      email: string;
+      fullName: string;
+      bio: string;
+      hourlyRate: string;
+      avatarUrl: string;
+      courtId?: string | null;
+    }) => {
       let user = await this.userRepo.findOne({
         where: { email: c.email, organizationId: org.id },
       });
@@ -457,6 +481,8 @@ export class SeedService implements OnModuleInit {
             passwordHash,
             fullName: c.fullName,
             status: "active",
+            courtId: c.courtId ?? null,
+            visibility: "public",
           }),
         );
         console.log(`[SeedService] Created coach user: ${c.fullName}`);
@@ -480,9 +506,233 @@ export class SeedService implements OnModuleInit {
       if (user && !user.avatarUrl) {
         await this.userRepo.update(user.id, { avatarUrl: c.avatarUrl });
       }
+    };
+
+    for (const c of coachUsers) {
+      await upsertCoachUser(c);
     }
+    for (const c of freeCoachUsers) {
+      await upsertCoachUser({ ...c, courtId: null });
+    }
+
     console.log(
-      `[SeedService] Coaches: ${coachUsers.length} coach users processed.`,
+      `[SeedService] Coaches: ${coachUsers.length} legacy + ${freeCoachUsers.length} directory-only users processed.`,
+    );
+  }
+
+  /**
+   * Demo map centers + 4 fake “court cluster” markers per location (not real venues).
+   */
+  private async ensureLocationMapMetadata() {
+    const configs: Array<{
+      name: string;
+      address: string;
+      latitude: string;
+      longitude: string;
+      markers: { lat: number; lng: number; label: string }[];
+    }> = [
+      {
+        name: "DEF Tennis Center",
+        address: "4714 Baldwin St, Dallas, TX 75210",
+        latitude: "32.7492000",
+        longitude: "-96.7550000",
+        markers: [
+          {
+            lat: 32.7531,
+            lng: -96.7582,
+            label: "2187 Maple Vale Rd (demo practice pods)",
+          },
+          {
+            lat: 32.7464,
+            lng: -96.7511,
+            label: "9402 Cedar Row (demo — not a real facility)",
+          },
+          {
+            lat: 32.7518,
+            lng: -96.7489,
+            label: "5530 Riverbend Ave (demo court cluster)",
+          },
+          {
+            lat: 32.7479,
+            lng: -96.7614,
+            label: "1100 Summit Trail (demo training area)",
+          },
+        ],
+      },
+      {
+        name: "Downtown Pickleball Club",
+        address: "100 Main St.",
+        latitude: "32.7831000",
+        longitude: "-96.8065000",
+        markers: [
+          {
+            lat: 32.7864,
+            lng: -96.8099,
+            label: "4421 Oak Hollow Ln (demo — fictional)",
+          },
+          {
+            lat: 32.7802,
+            lng: -96.8031,
+            label: "3099 Elm Park Way (demo pickleball pods)",
+          },
+          {
+            lat: 32.7851,
+            lng: -96.8012,
+            label: "672 Larkspur Dr (demo)",
+          },
+          {
+            lat: 32.7816,
+            lng: -96.8118,
+            label: "8800 Briar Patch Ct (demo venue placeholder)",
+          },
+        ],
+      },
+    ];
+
+    for (const c of configs) {
+      const loc = await this.locationRepo.findOne({ where: { name: c.name } });
+      if (!loc) continue;
+      await this.locationRepo.update(loc.id, {
+        address: c.address,
+        latitude: c.latitude,
+        longitude: c.longitude,
+        mapMarkers: JSON.stringify(c.markers),
+      });
+      console.log(`[SeedService] Map metadata updated for: ${c.name}`);
+    }
+  }
+
+  /**
+   * 1) coach1–coach20: each gets a courtId (round-robin all courts).
+   * 2) coach21–coach40: courtId null (public directory).
+   * 3) Every court: at least 12 coaches (10–15 range target = 12); add autofill users if needed.
+   */
+  private async assignCoachCourtAffiliations() {
+    const coachRole = await this.roleRepo.findOne({ where: { name: "coach" } });
+    if (!coachRole) return;
+
+    const org = await this.orgRepo.findOne({
+      where: { name: In(["CodyReserve", "VigorSports"]) },
+    });
+    const branch = await this.branchRepo.findOne({
+      where: { name: "Texas Region" },
+    });
+    if (!org || !branch) {
+      console.log("[SeedService] Coach assignments skip: org/branch missing.");
+      return;
+    }
+
+    const allCourts = await this.courtRepo.find({
+      order: { locationId: "ASC", name: "ASC" },
+    });
+    if (!allCourts.length) {
+      console.log("[SeedService] Coach assignments skip: no courts.");
+      return;
+    }
+
+    const legacyEmails = Array.from(
+      { length: 20 },
+      (_, i) => `coach${i + 1}@codyreserve.com`,
+    );
+    const freeEmails = Array.from(
+      { length: 20 },
+      (_, i) => `coach${i + 21}@codyreserve.com`,
+    );
+
+    for (let i = 0; i < legacyEmails.length; i++) {
+      const user = await this.userRepo.findOne({
+        where: { email: legacyEmails[i], organizationId: org.id },
+      });
+      if (!user) continue;
+      const court = allCourts[i % allCourts.length];
+      await this.userRepo.update(user.id, {
+        courtId: court.id,
+        visibility: "public",
+      });
+    }
+
+    for (const email of freeEmails) {
+      const user = await this.userRepo.findOne({
+        where: { email, organizationId: org.id },
+      });
+      if (!user) continue;
+      await this.userRepo.update(user.id, {
+        courtId: null,
+        visibility: "public",
+      });
+    }
+
+    /** Stable per court between 10 and 15 inclusive. */
+    const coachTargetForCourt = (courtId: string) => {
+      const hex = courtId.replace(/-/g, "").slice(0, 8);
+      const n = parseInt(hex, 16) || 0;
+      return 10 + (n % 6);
+    };
+
+    const passwordHash = await bcrypt.hash("Password123!", 10);
+
+    for (const court of allCourts) {
+      const target = coachTargetForCourt(court.id);
+      let assigned = await this.userRepo.count({
+        where: { courtId: court.id },
+      });
+      while (assigned < target) {
+        const email = `autofill-${court.id}-slot${assigned}@codyreserve.com`;
+        let user = await this.userRepo.findOne({
+          where: { email, organizationId: org.id },
+        });
+        if (!user) {
+          user = await this.userRepo.save(
+            this.userRepo.create({
+              organizationId: org.id,
+              branchId: branch.id,
+              roleId: coachRole.id,
+              email,
+              passwordHash,
+              fullName: `Demo staff — ${court.name} #${assigned + 1}`,
+              status: "active",
+              courtId: court.id,
+              visibility: "public",
+            }),
+          );
+          await this.coachRepo.save(
+            this.coachRepo.create({
+              userId: user.id,
+              experienceYears: 5,
+              bio: `Seed coach tied to "${court.name}" only (demo data).`,
+              hourlyRate: "42.00",
+            }),
+          );
+          console.log(
+            `[SeedService] Autofill coach for court "${court.name}" (${assigned + 1}/${target})`,
+          );
+        } else {
+          await this.userRepo.update(user.id, {
+            courtId: court.id,
+            visibility: "public",
+          });
+          const existingProfile = await this.coachRepo.findOne({
+            where: { userId: user.id },
+          });
+          if (!existingProfile) {
+            await this.coachRepo.save(
+              this.coachRepo.create({
+                userId: user.id,
+                experienceYears: 5,
+                bio: `Seed coach tied to "${court.name}" only (demo data).`,
+                hourlyRate: "42.00",
+              }),
+            );
+          }
+        }
+        assigned = await this.userRepo.count({
+          where: { courtId: court.id },
+        });
+      }
+    }
+
+    console.log(
+      "[SeedService] Coach assignments: legacy coach1–20 → courts (round-robin), coach21–40 → unassigned, each court 10–15 coaches (autofill).",
     );
   }
 }

@@ -1,7 +1,9 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
+import { buildListResponse, ListResponse } from "@app/common";
 import { Court } from "./entities/court.entity";
+import { Coach } from "../coaches/entities/coach.entity";
 import { CreateCourtDto } from "./dto/create-court.dto";
 import { UpdateCourtDto } from "./dto/update-court.dto";
 
@@ -10,6 +12,8 @@ export class CourtsService {
   constructor(
     @InjectRepository(Court)
     private readonly courtRepo: Repository<Court>,
+    @InjectRepository(Coach)
+    private readonly coachRepo: Repository<Coach>,
   ) {}
 
   async create(dto: CreateCourtDto) {
@@ -28,7 +32,9 @@ export class CourtsService {
     status?: string,
     search?: string,
     sport?: string,
-  ) {
+    pageIndex = 0,
+    pageSize = 500,
+  ): Promise<ListResponse<Court>> {
     const qb = this.courtRepo
       .createQueryBuilder("court")
       .leftJoinAndSelect("court.location", "location");
@@ -41,7 +47,15 @@ export class CourtsService {
         q: `%${search.trim().toLowerCase()}%`,
       });
     }
-    return qb.getMany();
+    qb.orderBy("court.name", "ASC");
+    const safePage = Math.max(0, pageIndex);
+    const safeSize = Math.min(1000, Math.max(1, pageSize));
+    const total = await qb.clone().getCount();
+    const data = await qb
+      .skip(safePage * safeSize)
+      .take(safeSize)
+      .getMany();
+    return buildListResponse(data, total, safePage, safeSize);
   }
 
   async findOne(id: string) {
@@ -50,7 +64,13 @@ export class CourtsService {
       relations: { location: true },
     });
     if (!court) throw new NotFoundException("Court not found");
-    return court;
+    const coaches = await this.coachRepo
+      .createQueryBuilder("coach")
+      .leftJoinAndSelect("coach.user", "user")
+      .where("user.courtId = :courtId", { courtId: id })
+      .orderBy("user.fullName", "ASC")
+      .getMany();
+    return { ...court, coaches };
   }
 
   async update(id: string, dto: UpdateCourtDto) {

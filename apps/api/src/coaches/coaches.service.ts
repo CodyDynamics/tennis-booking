@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
+import { buildListResponse, ListResponse } from "@app/common";
 import { Coach } from "./entities/coach.entity";
 import { CreateCoachDto } from "./dto/create-coach.dto";
 import { UpdateCoachDto } from "./dto/update-coach.dto";
@@ -20,15 +21,32 @@ export class CoachesService {
     return this.coachRepo.save(coach);
   }
 
-  async findAll(branchId?: string) {
+  /**
+   * Public coach directory: users with a coach profile who are not assigned to
+   * any court (`courtId` null) and have `visibility` = public.
+   */
+  async findDirectory(
+    branchId?: string,
+    pageIndex = 0,
+    pageSize = 100,
+  ): Promise<ListResponse<Coach>> {
     const qb = this.coachRepo
       .createQueryBuilder("coach")
       .leftJoinAndSelect("coach.user", "user")
+      .where("user.courtId IS NULL")
+      .andWhere("user.visibility = :vis", { vis: "public" })
       .orderBy("coach.createdAt", "DESC");
     if (branchId) {
       qb.andWhere("user.branchId = :branchId", { branchId });
     }
-    return qb.getMany();
+    const safePage = Math.max(0, pageIndex);
+    const safeSize = Math.min(500, Math.max(1, pageSize));
+    const total = await qb.clone().getCount();
+    const data = await qb
+      .skip(safePage * safeSize)
+      .take(safeSize)
+      .getMany();
+    return buildListResponse(data, total, safePage, safeSize);
   }
 
   async findOne(id: string) {

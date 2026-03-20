@@ -7,6 +7,7 @@ import { Repository } from "typeorm";
 import { Request } from "express";
 import { JwtPayload } from "@app/common";
 import { User } from "../../users/entities/user.entity";
+import { RedisService } from "../../redis/redis.service";
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -14,6 +15,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private configService: ConfigService,
     @InjectRepository(User)
     private userRepo: Repository<User>,
+    private redisService: RedisService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
@@ -29,6 +31,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
+    if (
+      payload.jti &&
+      (await this.redisService.isAccessTokenJtiBlacklisted(payload.jti))
+    ) {
+      throw new UnauthorizedException("Session revoked");
+    }
+
     const user = await this.userRepo.findOne({
       where: { id: payload.sub },
       relations: ["role"],

@@ -13,14 +13,18 @@ export default () => ({
   DB_LOGGING: process.env.DB_LOGGING || "false",
   jwt: {
     secret: process.env.JWT_SECRET || "your-secret-key",
-    expiresIn: process.env.JWT_EXPIRES_IN || "1h",
+    /** Short-lived access token (e.g. 15m). */
+    expiresIn: process.env.JWT_EXPIRES_IN || "15m",
     refreshSecret: process.env.JWT_REFRESH_SECRET || "your-refresh-secret-key",
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || "7d",
   },
   cookie: {
     accessTokenName: process.env.COOKIE_ACCESS_TOKEN_NAME || "access_token",
     refreshTokenName: process.env.COOKIE_REFRESH_TOKEN_NAME || "refresh_token",
-    accessTokenMaxAgeSeconds: 60 * 60, // 1h, match jwt.expiresIn
+    accessTokenMaxAgeSeconds: parseInt(
+      process.env.COOKIE_ACCESS_MAX_AGE_SECONDS || "900",
+      10,
+    ), // default 15m, match JWT_EXPIRES_IN
     refreshTokenMaxAgeSeconds: 7 * 24 * 60 * 60, // 7d
     sameSite: (() => {
       const env = process.env.COOKIE_SAME_SITE as
@@ -48,6 +52,7 @@ export default () => ({
       "http://localhost:3000/auth/google/callback",
   },
   redis: {
+    enabled: process.env.REDIS_ENABLED !== "false",
     host: process.env.REDIS_HOST || "localhost",
     port: parseInt(process.env.REDIS_PORT || "6379", 10),
   },

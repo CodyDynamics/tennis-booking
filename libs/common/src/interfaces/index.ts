@@ -3,6 +3,8 @@ export interface JwtPayload {
   email: string;
   organizationId?: string;
   roleId?: string;
+  /** Unique id for access-token blacklist on logout (Redis). */
+  jti?: string;
   iat?: number;
   exp?: number;
 }
