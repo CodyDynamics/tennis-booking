@@ -30,10 +30,21 @@ export class LocationsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'List locations' })
+  @ApiOperation({ summary: "List locations (paginated)" })
   @ApiQuery({ name: "branchId", required: false })
-  findAll(@Query("branchId") branchId?: string) {
-    return this.locationsService.findAll(branchId);
+  @ApiQuery({ name: "page", required: false })
+  @ApiQuery({ name: "pageSize", required: false })
+  findAll(
+    @Query("branchId") branchId?: string,
+    @Query("page") page?: string,
+    @Query("pageSize") pageSize?: string,
+  ) {
+    const pageIndex = Math.max(0, parseInt(page ?? "0", 10) || 0);
+    const size = Math.min(
+      500,
+      Math.max(1, parseInt(pageSize ?? "200", 10) || 200),
+    );
+    return this.locationsService.findAll(branchId, pageIndex, size);
   }
 
   @Get(':id')

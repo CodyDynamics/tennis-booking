@@ -13,7 +13,7 @@ import {
 import { AuthGuard } from "@nestjs/passport";
 import { ApiTags, ApiOperation, ApiBody, ApiResponse } from "@nestjs/swagger";
 import { ConfigService } from "@nestjs/config";
-import { Response } from "express";
+import { Request, Response } from "express";
 import { Public } from "@app/common";
 import { AuthService } from "./auth.service";
 import {
@@ -134,7 +134,7 @@ export class AuthController {
   ) {
     const result = await this.authService.register(registerDto);
     this.setAuthCookies(res, result.accessToken, result.refreshToken);
-    return { user: result.user };
+    return { user: result.user, accessToken: result.accessToken };
   }
 
   @Post("request-login-otp")
@@ -165,14 +165,18 @@ export class AuthController {
     @Body() dto: VerifyLoginOtpDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.authService.verifyLoginOtp(dto.email, dto.otp);
+    const result = await this.authService.verifyLoginOtp(
+      dto.email,
+      dto.otp,
+      dto.rememberMe,
+    );
     this.setAuthCookies(
       res,
       result.accessToken,
       result.refreshToken,
       dto.rememberMe,
     );
-    return { user: result.user };
+    return { user: result.user, accessToken: result.accessToken };
   }
 
   @Post("login")
@@ -197,7 +201,7 @@ export class AuthController {
       result.refreshToken,
       loginDto.rememberMe,
     );
-    return { user: result.user };
+    return { user: result.user, accessToken: result.accessToken };
   }
 
   @Get("google")
@@ -224,7 +228,7 @@ export class AuthController {
   ) {
     const result = await this.authService.googleLogin(req.user);
     this.setAuthCookies(res, result.accessToken, result.refreshToken);
-    return { user: result.user };
+    return { user: result.user, accessToken: result.accessToken };
   }
 
   @Post("logout")
@@ -232,7 +236,21 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Logout and clear auth cookies" })
   @ApiResponse({ status: 200, description: "Cookies cleared" })
-  logout(@Res({ passthrough: true }) res: Response) {
+  async logout(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const accessName = this.configService.get<string>(
+      "cookie.accessTokenName",
+      "access_token",
+    );
+    const refreshName = this.configService.get<string>(
+      "cookie.refreshTokenName",
+      "refresh_token",
+    );
+    const at = req.cookies?.[accessName];
+    const rt = req.cookies?.[refreshName];
+    await this.authService.logout(at, rt);
     this.clearAuthCookies(res);
     return { message: "Logged out" };
   }
@@ -283,7 +301,12 @@ export class AuthController {
       throw new UnauthorizedException("Refresh token required");
     }
     const result = await this.authService.refreshToken(token);
-    this.setAuthCookies(res, result.accessToken, result.refreshToken);
-    return { user: result.user };
+    this.setAuthCookies(
+      res,
+      result.accessToken,
+      result.refreshToken,
+      result.longSession,
+    );
+    return { user: result.user, accessToken: result.accessToken };
   }
 }

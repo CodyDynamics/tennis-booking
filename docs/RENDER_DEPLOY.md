@@ -57,4 +57,6 @@ Backend trả **503** khi không gửi được email OTP (đúng nghĩa "servic
 - `DB_SYNC=true` (cho lần deploy đầu để tạo bảng)
 - **Email (để gửi OTP):** `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASSWORD`, `EMAIL_FROM`
 - **Tùy chọn:** `LOGIN_OTP_ENABLED=false` để tắt login OTP (chỉ login bằng email + password) khi chưa gửi email được trên Render.
-- Các biến khác: `FRONTEND_URL` (URL frontend Vercel để CORS), v.v.
+- **Redis:** `REDIS_HOST` / `REDIS_PORT` (hoặc dùng Redis addon trên Render). Đặt `REDIS_ENABLED=false` nếu không có Redis — refresh token vẫn bị xóa trong Postgres khi logout, nhưng access token cũ không bị blacklist qua Redis.
+- **Auth:** Sau deploy có bảng `refresh_tokens`; user cookie refresh **JWT cũ** sẽ hết hiệu lực — cần **đăng nhập lại** một lần.
+- Các biến khác: `FRONTEND_URL` (URL frontend Vercel để CORS), `JWT_EXPIRES_IN=15m`, v.v. Chi tiết: `docs/AUTH_TOKENS.md`.

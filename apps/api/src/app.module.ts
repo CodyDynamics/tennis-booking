@@ -13,6 +13,7 @@ import { DatabaseModule } from "./database/database.module";
 import { User } from "./users/entities/user.entity";
 import { Role } from "./roles/entities/role.entity";
 import { PasswordResetToken } from "./auth/entities/password-reset-token.entity";
+import { RefreshToken } from "./auth/entities/refresh-token.entity";
 import { Branch } from "./branches/entities/branch.entity";
 import { Organization } from "./organizations/entities/organization.entity";
 import { Location } from "./locations/entities/location.entity";
@@ -29,6 +30,7 @@ import { BookingsModule } from "./bookings/bookings.module";
 import { RolesModule } from "./roles/roles.module";
 import { OrganizationsModule } from "./organizations/organizations.module";
 import { SportsModule } from "./sports/sports.module";
+import { RedisModule } from "./redis/redis.module";
 
 @Module({
   imports: [
@@ -52,6 +54,7 @@ import { SportsModule } from "./sports/sports.module";
           User,
           Role,
           PasswordResetToken,
+          RefreshToken,
           Branch,
           Organization,
           Location,
@@ -81,7 +84,7 @@ import { SportsModule } from "./sports/sports.module";
         const expiresIn =
           config.get<string>("jwt.expiresIn") ||
           process.env.JWT_EXPIRES_IN ||
-          "1h";
+          "15m";
         if (!jwtSecret || jwtSecret.trim() === "") {
           throw new Error("JWT_SECRET must be set in environment variables");
         }
@@ -93,6 +96,7 @@ import { SportsModule } from "./sports/sports.module";
       inject: [ConfigService],
     }),
 
+    RedisModule,
     DatabaseModule,
     AuthModule,
     UsersModule,

@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Location } from './entities/location.entity';
-import { CreateLocationDto } from './dto/create-location.dto';
-import { UpdateLocationDto } from './dto/update-location.dto';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { buildListResponse, ListResponse } from "@app/common";
+import { Location } from "./entities/location.entity";
+import { CreateLocationDto } from "./dto/create-location.dto";
+import { UpdateLocationDto } from "./dto/update-location.dto";
 
 @Injectable()
 export class LocationsService {
@@ -16,12 +17,25 @@ export class LocationsService {
     return this.locationRepo.save(this.locationRepo.create(dto));
   }
 
-  async findAll(branchId?: string) {
-    const qb = this.locationRepo.createQueryBuilder('location');
+  async findAll(
+    branchId?: string,
+    pageIndex = 0,
+    pageSize = 200,
+  ): Promise<ListResponse<Location>> {
+    const qb = this.locationRepo
+      .createQueryBuilder("location")
+      .orderBy("location.name", "ASC");
     if (branchId) {
-      qb.andWhere('location.branchId = :branchId', { branchId });
+      qb.andWhere("location.branchId = :branchId", { branchId });
     }
-    return qb.getMany();
+    const safePage = Math.max(0, pageIndex);
+    const safeSize = Math.min(500, Math.max(1, pageSize));
+    const total = await qb.clone().getCount();
+    const data = await qb
+      .skip(safePage * safeSize)
+      .take(safeSize)
+      .getMany();
+    return buildListResponse(data, total, safePage, safeSize);
   }
 
   async findOne(id: string) {

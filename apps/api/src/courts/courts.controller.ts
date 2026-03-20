@@ -48,21 +48,38 @@ export class CourtsController {
   @ApiQuery({ name: "status", required: false, enum: ["active", "maintenance"] })
   @ApiQuery({ name: "search", required: false, description: "Search by court name" })
   @ApiQuery({ name: "sport", required: false, enum: ["tennis", "pickleball"] })
-  @ApiResponse({ status: 200, description: "Array of courts" })
+  @ApiQuery({ name: "page", required: false, description: "Page index (0-based)" })
+  @ApiQuery({ name: "pageSize", required: false, description: "Page size (max 1000, default 500)" })
+  @ApiResponse({ status: 200, description: "Paginated list: total, data, paginationInfo" })
   findAll(
     @Query("locationId") locationId?: string,
     @Query("branchId") branchId?: string,
     @Query("status") status?: string,
     @Query("search") search?: string,
     @Query("sport") sport?: string,
+    @Query("page") page?: string,
+    @Query("pageSize") pageSize?: string,
   ) {
-    return this.courtsService.findAll(locationId, branchId, status, search, sport);
+    const pageIndex = Math.max(0, parseInt(page ?? "0", 10) || 0);
+    const size = Math.min(
+      1000,
+      Math.max(1, parseInt(pageSize ?? "500", 10) || 500),
+    );
+    return this.courtsService.findAll(
+      locationId,
+      branchId,
+      status,
+      search,
+      sport,
+      pageIndex,
+      size,
+    );
   }
 
   @Get(":id")
   @ApiOperation({ summary: "Get court by id" })
   @ApiParam({ name: "id", description: "Court UUID" })
-  @ApiResponse({ status: 200, description: "Court details" })
+  @ApiResponse({ status: 200, description: "Court details including coaches assigned to this court" })
   @ApiResponse({ status: 404, description: "Court not found" })
   findOne(@Param("id") id: string) {
     return this.courtsService.findOne(id);

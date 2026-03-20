@@ -23,6 +23,21 @@ export class Location {
   @Column({ type: "varchar", nullable: true })
   address: string | null;
 
+  /** Map center latitude (WGS84), decimal string from DB */
+  @Column({ type: "decimal", precision: 10, scale: 7, nullable: true })
+  latitude: string | null;
+
+  /** Map center longitude (WGS84) */
+  @Column({ type: "decimal", precision: 10, scale: 7, nullable: true })
+  longitude: string | null;
+
+  /**
+   * JSON array of demo markers near this location:
+   * `[{ "lat": number, "lng": number, "label": string }]`
+   */
+  @Column({ type: "text", nullable: true })
+  mapMarkers: string | null;
+
   @Column({ default: "active" })
   status: string; // active | inactive
 

@@ -12,6 +12,25 @@ Legend:
 - **Query**: query string
 - **Param**: path parameter
 
+### Paginated list shape (`ListResponse<T>`)
+
+Several `GET` list endpoints return:
+
+```json
+{
+  "total": 42,
+  "data": [ /* T[] */ ],
+  "paginationInfo": {
+    "pageIndex": 0,
+    "pageSize": 20,
+    "totalItems": 42,
+    "totalPages": 3
+  }
+}
+```
+
+Helper: `buildListResponse` / `buildFullListResponse` in `@app/common` (`list-response.dto.ts`).
+
 ---
 
 ## 1. Health
@@ -57,8 +76,8 @@ Legend:
 | Method | Path | Description | Auth | Input | Output |
 |--------|------|-------------|------|--------|--------|
 | POST | `/courts` | Create court | 🔒 | **Body:** branchId, name, type?, pricePerHour?, description?, status? | Court object |
-| GET | `/courts` | List courts | 🔓 | **Query:** branchId?, status? | Array of Court |
-| GET | `/courts/:id` | Get court by id | 🔓 | **Param:** id (UUID) | Court object |
+| GET | `/courts` | List courts | 🔓 | **Query:** locationId?, branchId?, status?, search?, sport?, **page?, pageSize?** | **`ListResponse<Court>`** (default pageSize 500) |
+| GET | `/courts/:id` | Get court by id | 🔓 | **Param:** id (UUID) | Court + **`coaches`** (coach profiles whose `user.courtId` = this court) |
 | PATCH | `/courts/:id` | Update court | 🔒 | **Param:** id; **Body:** partial CreateCourtDto | Court object |
 | DELETE | `/courts/:id` | Delete court | 🔒 | **Param:** id | `{ deleted: true }` |
 
@@ -69,7 +88,7 @@ Legend:
 | Method | Path | Description | Auth | Input | Output |
 |--------|------|-------------|------|--------|--------|
 | POST | `/coaches` | Create coach | 🔒 | **Body:** userId, experienceYears?, bio?, hourlyRate? | Coach object |
-| GET | `/coaches` | List coaches | 🔓 | — | Array of Coach |
+| GET | `/coaches` | Public coach directory | 🔓 | **Query:** branchId?, **page?, pageSize?** | **`ListResponse<Coach>`** — only coaches with **`user.courtId` null** and **`user.visibility` = `public`** |
 | GET | `/coaches/:id` | Get coach by id | 🔓 | **Param:** id (UUID) | Coach object |
 | PATCH | `/coaches/:id` | Update coach | 🔒 | **Param:** id; **Body:** partial CreateCoachDto | Coach object |
 | DELETE | `/coaches/:id` | Delete coach | 🔒 | **Param:** id | `{ deleted: true }` |

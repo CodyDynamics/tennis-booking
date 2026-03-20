@@ -16,6 +16,8 @@ import { JwtPayload } from "@app/common";
 import { User } from "../users/entities/user.entity";
 import { Role } from "../roles/entities/role.entity";
 import { PasswordResetToken } from "./entities/password-reset-token.entity";
+import { RefreshToken } from "./entities/refresh-token.entity";
+import { RedisService } from "../redis/redis.service";
 import {
   RegisterDto,
   LoginDto,
@@ -36,10 +38,13 @@ export class AuthService {
     private roleRepo: Repository<Role>,
     @InjectRepository(PasswordResetToken)
     private resetTokenRepo: Repository<PasswordResetToken>,
+    @InjectRepository(RefreshToken)
+    private refreshTokenRepo: Repository<RefreshToken>,
     private jwtService: JwtService,
     private configService: ConfigService,
     private emailService: EmailService,
     private otpStore: OtpStoreService,
+    private redisService: RedisService,
   ) {}
 
   async register(registerDto: RegisterDto) {
@@ -82,6 +87,8 @@ export class AuthService {
         organizationId,
         branchId,
         roleId,
+        courtId: null,
+        visibility: "public",
       }),
     );
     const userWithRole = await this.userRepo.findOne({
@@ -95,6 +102,7 @@ export class AuthService {
       userWithRole.email,
       userWithRole.organizationId ?? undefined,
       userWithRole.roleId,
+      { rememberMe: false },
     );
 
     return {
@@ -138,6 +146,7 @@ export class AuthService {
       user.email,
       user.organizationId ?? undefined,
       user.roleId,
+      { rememberMe: loginDto.rememberMe === true },
     );
 
     return {
@@ -196,6 +205,7 @@ export class AuthService {
       user.email,
       user.organizationId ?? undefined,
       user.roleId,
+      { rememberMe: false },
     );
 
     return {
@@ -287,7 +297,7 @@ export class AuthService {
   }
 
   /** Verify OTP and return tokens (login). */
-  async verifyLoginOtp(email: string, otp: string) {
+  async verifyLoginOtp(email: string, otp: string, rememberMe?: boolean) {
     const user = await this.userRepo.findOne({
       where: { email: email.trim().toLowerCase() },
       relations: ["role"],
@@ -303,6 +313,7 @@ export class AuthService {
       user.email,
       user.organizationId ?? undefined,
       user.roleId,
+      { rememberMe: rememberMe === true },
     );
     return {
       user: {
@@ -315,39 +326,80 @@ export class AuthService {
     };
   }
 
-  async refreshToken(refreshToken: string) {
-    try {
-      const payload = this.jwtService.verify(refreshToken, {
-        secret: this.configService.get<string>("jwt.refreshSecret"),
-      });
-
-      const user = await this.userRepo.findOne({
-        where: { id: payload.sub },
-        relations: ["role"],
-      });
-
-      if (!user || user.status !== "active") {
-        throw new UnauthorizedException("User not found or inactive");
-      }
-
-      const tokens = await this.generateTokens(
-        user.id,
-        user.email,
-        user.organizationId ?? undefined,
-        user.roleId,
-      );
-      return {
-        ...tokens,
-        user: {
-          id: user.id,
-          email: user.email,
-          fullName: user.fullName,
-          role: user.role.name,
-        },
-      };
-    } catch {
+  /**
+   * Opaque refresh token from cookie/body: verify hash in Postgres, rotate, return new pair.
+   */
+  async refreshToken(rawRefreshToken: string) {
+    const tokenHash = this.hashRefreshToken(rawRefreshToken);
+    const row = await this.refreshTokenRepo.findOne({
+      where: { tokenHash },
+    });
+    if (!row || row.expiresAt < new Date()) {
       throw new UnauthorizedException("Invalid refresh token");
     }
+
+    const user = await this.userRepo.findOne({
+      where: { id: row.userId },
+      relations: ["role"],
+    });
+    if (!user || user.status !== "active") {
+      await this.refreshTokenRepo.delete({ id: row.id });
+      throw new UnauthorizedException("User not found or inactive");
+    }
+
+    await this.refreshTokenRepo.delete({ id: row.id });
+
+    const tokens = await this.generateTokens(
+      user.id,
+      user.email,
+      user.organizationId ?? undefined,
+      user.roleId,
+      { rememberMe: row.longSession },
+    );
+
+    return {
+      ...tokens,
+      longSession: row.longSession,
+      user: {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role.name,
+      },
+    };
+  }
+
+  /**
+   * Remove refresh row from Postgres; blacklist current access token jti in Redis until AT expiry.
+   */
+  async logout(accessToken?: string, rawRefreshToken?: string) {
+    if (rawRefreshToken) {
+      const tokenHash = this.hashRefreshToken(rawRefreshToken);
+      await this.refreshTokenRepo.delete({ tokenHash });
+    }
+    if (accessToken) {
+      try {
+        const decoded = this.jwtService.decode(accessToken) as JwtPayload | null;
+        if (decoded?.jti && decoded.exp) {
+          const nowSec = Math.floor(Date.now() / 1000);
+          const ttl = decoded.exp - nowSec;
+          await this.redisService.blacklistAccessTokenJti(decoded.jti, ttl);
+        }
+      } catch {
+        // ignore malformed token
+      }
+    }
+  }
+
+  private hashRefreshToken(raw: string): string {
+    return crypto.createHash("sha256").update(raw, "utf8").digest("hex");
+  }
+
+  private refreshTtlMs(longSession: boolean): number {
+    if (longSession) {
+      return 30 * 24 * 60 * 60 * 1000;
+    }
+    return 7 * 24 * 60 * 60 * 1000;
   }
 
   private async generateTokens(
@@ -355,25 +407,36 @@ export class AuthService {
     email: string,
     organizationId?: string,
     roleId?: string,
+    options?: { rememberMe?: boolean },
   ) {
+    const rememberMe = options?.rememberMe === true;
+    const jti = crypto.randomUUID();
     const payload: JwtPayload = {
       sub: userId,
       email,
       organizationId,
       roleId,
+      jti,
     };
 
-    const [accessToken, refreshToken] = await Promise.all([
-      this.jwtService.signAsync(payload, {
-        secret: this.configService.get<string>("jwt.secret"),
-        expiresIn: this.configService.get<string>("jwt.expiresIn"),
-      }),
-      this.jwtService.signAsync(payload, {
-        secret: this.configService.get<string>("jwt.refreshSecret"),
-        expiresIn: this.configService.get<string>("jwt.refreshExpiresIn"),
-      }),
-    ]);
+    const accessToken = await this.jwtService.signAsync(payload, {
+      secret: this.configService.get<string>("jwt.secret"),
+      expiresIn: this.configService.get<string>("jwt.expiresIn"),
+    });
 
-    return { accessToken, refreshToken };
+    const refreshRaw = crypto.randomBytes(48).toString("base64url");
+    const tokenHash = this.hashRefreshToken(refreshRaw);
+    const expiresAt = new Date(Date.now() + this.refreshTtlMs(rememberMe));
+
+    await this.refreshTokenRepo.save(
+      this.refreshTokenRepo.create({
+        userId,
+        tokenHash,
+        expiresAt,
+        longSession: rememberMe,
+      }),
+    );
+
+    return { accessToken, refreshToken: refreshRaw };
   }
 }
