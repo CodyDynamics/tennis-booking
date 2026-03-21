@@ -1,62 +1,62 @@
-# Deploy Backend lên Render.com
+# Deploying the backend to Render.com
 
-## Lỗi `relation "sports" does not exist`
+## Error: `relation "sports" does not exist`
 
-Trên production (Render), app tắt **TypeORM synchronize** nên không tự tạo bảng. Database Postgres trên Render mới tạo sẽ trống → khi SeedService chạy (hoặc API gọi bảng `sports`) sẽ báo lỗi **relation "sports" does not exist**.
+On production (Render), the app usually has **TypeORM synchronize** disabled, so tables are **not** auto-created. A new Render Postgres database is empty → when `SeedService` runs (or any API hits the `sports` table), Postgres returns **`relation "sports" does not exist`**.
 
-## Cách xử lý: Bật sync cho lần deploy đầu
+## Fix: enable sync for the first deploy
 
-1. Vào **Render Dashboard** → chọn **Web Service** (backend) → **Environment**.
-2. Thêm biến môi trường:
+1. Open **Render Dashboard** → your **Web Service** (backend) → **Environment**.
+2. Add:
    - **Key:** `DB_SYNC`
    - **Value:** `true`
-3. **Save** và **Deploy** lại (hoặc đợi redeploy).
+3. **Save** and **Deploy** again (or wait for redeploy).
 
-Sau khi deploy xong, TypeORM sẽ tạo toàn bộ bảng (users, roles, sports, courts, …) và SeedService chạy seed dữ liệu mặc định.
+After deploy, TypeORM creates all tables (`users`, `roles`, `sports`, `courts`, …) and `SeedService` can seed default data.
 
-### Sau lần chạy đầu (tùy chọn)
+### After the first run (optional)
 
-Nếu muốn tắt auto-sync để tránh thay đổi schema khi đổi entity:
+To turn off auto-sync and avoid accidental schema changes when entities change:
 
-- Xóa biến `DB_SYNC` hoặc đặt `DB_SYNC=false`, rồi deploy lại.  
-- Lưu ý: từ lúc đó nếu bạn thêm/sửa entity, cần tự tạo và chạy migration (hoặc tạm bật lại `DB_SYNC=true` cho một lần deploy).
+- Remove `DB_SYNC` or set `DB_SYNC=false`, then redeploy.  
+- **Note:** from then on, entity changes require **migrations** (or temporarily set `DB_SYNC=true` for one deploy).
 
-## Lỗi 500 trên `/auth/request-login-otp` (OTP gửi chậm / không gửi được)
+## HTTP 500 on `/auth/request-login-otp` (slow OTP / email not sent)
 
-Trên Render, request OTP có thể **rất chậm** hoặc **500** vì:
+On Render, OTP requests may be **very slow** or return **500** because:
 
-1. **Gửi email (Gmail SMTP)** – Render có thể chặn hoặc throttle kết nối ra cổng 587. Gmail có thể timeout hoặc từ chối.
-2. **Không thấy log** – Sau khi thêm middleware, mỗi request sẽ in ra log dạng `POST /auth/request-login-otp 500 15234ms`. Nếu vẫn không thấy gì thì request chưa tới backend (kiểm tra URL API trên frontend, CORS, hoặc Render chưa nhận traffic).
+1. **Email (Gmail SMTP)** — Render may block or throttle outbound port **587**; Gmail may time out or reject.
+2. **No logs** — With request logging middleware, each request logs like `POST /auth/request-login-otp 500 15234ms`. If you see nothing, the request may not reach the backend (check frontend API URL, CORS, or Render routing).
 
-**Đã xử lý trong code:**
+**Implemented in code:**
 
-- Timeout SMTP 15s (connection) + 10s (greeting) để tránh treo lâu.
-- Bắt lỗi gửi email, ghi log chi tiết và trả **503** với message rõ ràng thay vì 500 chung chung.
-- Middleware log mỗi request (method, path, status, duration) để dễ debug trên Render Logs.
+- SMTP timeouts: 15s (connection) + 10s (greeting) to avoid hanging.
+- Email errors are caught, logged, and return **503** with a clear message instead of a generic 500.
+- Middleware logs method, path, status, and duration for **Render Logs**.
 
-**Bạn cần làm:**
+**What you should do:**
 
-- Trên Render → **Environment**: cấu hình đủ `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASSWORD`, `EMAIL_FROM` (dùng Gmail App Password, xem `docs/EMAIL_SETUP.md`).
-- Mở **Logs** của Web Service trên Render: khi login bạn sẽ thấy dòng `POST /auth/request-login-otp ...`. Nếu lỗi gửi email sẽ có dòng `[AuthService] Send OTP email failed for ...` kèm nguyên nhân (timeout, ECONNREFUSED, auth failed, v.v.).
-- Nếu Render chặn SMTP: cân nhắc dùng dịch vụ email khác (SendGrid, Mailgun, Resend) hỗ trợ tốt trên cloud, hoặc dùng Gmail qua relay có hỗ trợ.
+- In Render → **Environment**, set `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASSWORD`, `EMAIL_FROM` (Gmail App Password — see `docs/EMAIL_SETUP.md`).
+- Open the Web Service **Logs** on Render: on login you should see `POST /auth/request-login-otp ...`. Email failures log `[AuthService] Send OTP email failed for ...` with the reason (timeout, `ECONNREFUSED`, auth failed, etc.).
+- If Render blocks SMTP, use a transactional provider (**SendGrid**, **Mailgun**, **Resend**) or a relay that works on your host.
 
-### Lỗi 503 "Unable to send verification email"
+### HTTP 503 “Unable to send verification email”
 
-Backend trả **503** khi không gửi được email OTP (đúng nghĩa "service unavailable"). **Đổi sang 403 hay mã khác không làm email gửi được** – cần xử lý nguyên nhân (SMTP trên Render bị chặn/timeout).
+The backend returns **503** when the OTP email cannot be sent (true “service unavailable”). **Changing the status code to 403 does not fix delivery** — fix SMTP/network or use another provider.
 
-**Cách dùng tạm khi chưa cấu hình email ổn trên Render:**
+**Temporary workaround if email is not reliable on Render:**
 
-- Trên Render → **Environment** thêm: **`LOGIN_OTP_ENABLED`** = **`false`**.
-- Deploy lại → login sẽ **không** qua OTP (chỉ email + password), không cần gửi email. Khi nào đã cấu hình xong email (hoặc dùng SendGrid/Resend), đặt `LOGIN_OTP_ENABLED=true` để bật lại OTP.
+- In Render → **Environment**, set **`LOGIN_OTP_ENABLED`** = **`false`**.
+- Redeploy → login uses **email + password only** (no OTP email). When email is ready, set `LOGIN_OTP_ENABLED=true` again.
 
-## Biến môi trường cần thiết trên Render
+## Required environment variables on Render
 
 - `NODE_ENV=production`
-- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASS`, `DB_NAME` (lấy từ Render Postgres)
-- `JWT_SECRET`, `JWT_REFRESH_SECRET` (đặt giá trị bí mật)
-- `DB_SYNC=true` (cho lần deploy đầu để tạo bảng)
-- **Email (để gửi OTP):** `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASSWORD`, `EMAIL_FROM`
-- **Tùy chọn:** `LOGIN_OTP_ENABLED=false` để tắt login OTP (chỉ login bằng email + password) khi chưa gửi email được trên Render.
-- **Redis:** `REDIS_HOST` / `REDIS_PORT` (hoặc dùng Redis addon trên Render). Đặt `REDIS_ENABLED=false` nếu không có Redis — refresh token vẫn bị xóa trong Postgres khi logout, nhưng access token cũ không bị blacklist qua Redis.
-- **Auth:** Sau deploy có bảng `refresh_tokens`; user cookie refresh **JWT cũ** sẽ hết hiệu lực — cần **đăng nhập lại** một lần.
-- Các biến khác: `FRONTEND_URL` (URL frontend Vercel để CORS), `JWT_EXPIRES_IN=15m`, v.v. Chi tiết: `docs/AUTH_TOKENS.md`.
+- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASS`, `DB_NAME` (from Render Postgres)
+- `JWT_SECRET`, `JWT_REFRESH_SECRET` (strong secrets)
+- `DB_SYNC=true` (first deploy only, to create tables)
+- **Email (OTP):** `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASSWORD`, `EMAIL_FROM`
+- **Optional:** `LOGIN_OTP_ENABLED=false` to disable OTP login when email is not configured on Render.
+- **Redis:** `REDIS_HOST` / `REDIS_PORT` (or a Render Redis add-on). Set `REDIS_ENABLED=false` if you have no Redis — refresh tokens are still removed in Postgres on logout, but old access tokens are **not** blacklisted in Redis.
+- **Auth:** After deploy, table `refresh_tokens` exists; users with an **old JWT refresh** cookie must **sign in again** once.
+- Other: `FRONTEND_URL` (e.g. Vercel URL for CORS), `JWT_EXPIRES_IN=15m`, etc. See `docs/AUTH_TOKENS.md`.

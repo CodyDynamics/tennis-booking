@@ -88,6 +88,7 @@ backend/
 
 ## Related docs
 
+- **DATABASE_ERD.md** – PostgreSQL schema: tables, relationships, multi-tenant model.
 - **DOCKER_SETUP.md** – Docker for backend.
 - **LOCAL_SETUP.md** – Local run step by step.
 - **MIGRATION_SETUP.md** – Monorepo, pnpm, database migration.
