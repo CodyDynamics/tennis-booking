@@ -95,6 +95,7 @@ export class SeedService implements OnModuleInit {
       await this.seedSportsData();
       await this.ensureLocationMapMetadata();
       await this.seedLocationBookingWindows();
+      await this.ensureExpandedCourtsAndPrices();
       await this.updateCourtsWithImages();
       await this.seedCoaches();
       await this.assignCoachCourtAffiliations();
@@ -255,9 +256,11 @@ export class SeedService implements OnModuleInit {
   private async updateCourtsWithImages() {
     const tennisCourts = await this.courtRepo.find({
       where: { sport: "tennis" },
+      order: { name: "ASC" },
     });
     const pickleballCourts = await this.courtRepo.find({
       where: { sport: "pickleball" },
+      order: { name: "ASC" },
     });
     for (let i = 0; i < tennisCourts.length; i++) {
       const court = tennisCourts[i];
@@ -716,6 +719,68 @@ export class SeedService implements OnModuleInit {
         slotGridMinutes: 30,
         sortOrder: 2,
       },
+      // DEF — indoor tennis (extra courts)
+      {
+        locationName: "DEF Tennis Center",
+        sport: "tennis",
+        courtType: "indoor",
+        windowStartTime: "08:00:00",
+        windowEndTime: "10:30:00",
+        allowedDurationMinutes: "[30,60,90]",
+        slotGridMinutes: 30,
+        sortOrder: 0,
+      },
+      {
+        locationName: "DEF Tennis Center",
+        sport: "tennis",
+        courtType: "indoor",
+        windowStartTime: "14:00:00",
+        windowEndTime: "15:30:00",
+        allowedDurationMinutes: "[30,60,90]",
+        slotGridMinutes: 30,
+        sortOrder: 1,
+      },
+      {
+        locationName: "DEF Tennis Center",
+        sport: "tennis",
+        courtType: "indoor",
+        windowStartTime: "19:00:00",
+        windowEndTime: "20:30:00",
+        allowedDurationMinutes: "[30,60,90]",
+        slotGridMinutes: 30,
+        sortOrder: 2,
+      },
+      // Downtown Pickleball — outdoor pickleball
+      {
+        locationName: "Downtown Pickleball Club",
+        sport: "pickleball",
+        courtType: "outdoor",
+        windowStartTime: "08:00:00",
+        windowEndTime: "10:30:00",
+        allowedDurationMinutes: "[30,60,90]",
+        slotGridMinutes: 30,
+        sortOrder: 0,
+      },
+      {
+        locationName: "Downtown Pickleball Club",
+        sport: "pickleball",
+        courtType: "outdoor",
+        windowStartTime: "14:00:00",
+        windowEndTime: "15:30:00",
+        allowedDurationMinutes: "[30,60,90]",
+        slotGridMinutes: 30,
+        sortOrder: 1,
+      },
+      {
+        locationName: "Downtown Pickleball Club",
+        sport: "pickleball",
+        courtType: "outdoor",
+        windowStartTime: "19:00:00",
+        windowEndTime: "20:30:00",
+        allowedDurationMinutes: "[30,60,90]",
+        slotGridMinutes: 30,
+        sortOrder: 2,
+      },
     ];
 
     for (const w of windows) {
@@ -753,6 +818,284 @@ export class SeedService implements OnModuleInit {
   }
 
   /**
+   * Extra courts + varied public hourly rates (idempotent by location + court name).
+   * Runs on every seed so existing DBs gain new rows without wiping data.
+   */
+  private async ensureExpandedCourtsAndPrices() {
+    const def = await this.locationRepo.findOne({
+      where: { name: "DEF Tennis Center" },
+    });
+    const dpc = await this.locationRepo.findOne({
+      where: { name: "Downtown Pickleball Club" },
+    });
+    if (!def || !dpc) {
+      console.log(
+        "[SeedService] ensureExpandedCourtsAndPrices skip: locations missing.",
+      );
+      return;
+    }
+
+    type CourtSeed = {
+      name: string;
+      sport: string;
+      type: "indoor" | "outdoor";
+      pricePerHourPublic: string;
+      pricePerHourMember: string | null;
+      description: string;
+    };
+
+    const hashPick = (s: string, mod: number) => {
+      let h = 0;
+      for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+      return h % mod;
+    };
+
+    const pickTennisMedia = (name: string) => {
+      const idx = hashPick(name, TENNIS_IMAGES.length);
+      return {
+        imageUrl: TENNIS_IMAGES[idx],
+        imageGallery: TENNIS_GALLERIES[idx],
+      };
+    };
+    const pickPbMedia = (name: string) => {
+      const idx = hashPick(name, PICKLEBALL_IMAGES.length);
+      return {
+        imageUrl: PICKLEBALL_IMAGES[idx],
+        imageGallery: PICKLEBALL_GALLERIES[idx],
+      };
+    };
+
+    const defCourts: CourtSeed[] = [
+      {
+        name: "Court 1",
+        sport: "tennis",
+        type: "outdoor",
+        pricePerHourPublic: "22.00",
+        pricePerHourMember: null,
+        description: "Outdoor hard — baseline practice.",
+      },
+      {
+        name: "Court 2",
+        sport: "tennis",
+        type: "outdoor",
+        pricePerHourPublic: "28.00",
+        pricePerHourMember: null,
+        description: "Outdoor hard — match play.",
+      },
+      {
+        name: "Court 3",
+        sport: "tennis",
+        type: "outdoor",
+        pricePerHourPublic: "35.00",
+        pricePerHourMember: null,
+        description: "Outdoor premium surface.",
+      },
+      {
+        name: "Court 4",
+        sport: "tennis",
+        type: "outdoor",
+        pricePerHourPublic: "40.00",
+        pricePerHourMember: null,
+        description: "Outdoor show court (floodlights).",
+      },
+      {
+        name: "Court 5",
+        sport: "tennis",
+        type: "outdoor",
+        pricePerHourPublic: "32.00",
+        pricePerHourMember: null,
+        description: "Outdoor — doubles friendly.",
+      },
+      {
+        name: "Championship Court",
+        sport: "tennis",
+        type: "outdoor",
+        pricePerHourPublic: "55.00",
+        pricePerHourMember: null,
+        description: "Center court with seating (premium).",
+      },
+      {
+        name: "Tennis Dome A",
+        sport: "tennis",
+        type: "indoor",
+        pricePerHourPublic: "38.00",
+        pricePerHourMember: null,
+        description: "Climate-controlled indoor tennis.",
+      },
+      {
+        name: "Tennis Dome B",
+        sport: "tennis",
+        type: "indoor",
+        pricePerHourPublic: "42.00",
+        pricePerHourMember: null,
+        description: "Indoor hard — high ceiling.",
+      },
+      {
+        name: "Tennis Dome C",
+        sport: "tennis",
+        type: "indoor",
+        pricePerHourPublic: "48.00",
+        pricePerHourMember: null,
+        description: "Indoor — video-friendly layout.",
+      },
+      {
+        name: "Tennis Dome D",
+        sport: "tennis",
+        type: "indoor",
+        pricePerHourPublic: "52.00",
+        pricePerHourMember: null,
+        description: "Indoor premium cushioned surface.",
+      },
+    ];
+
+    const dpcCourts: CourtSeed[] = [
+      {
+        name: "Pickleball Court 1",
+        sport: "pickleball",
+        type: "indoor",
+        pricePerHourPublic: "14.00",
+        pricePerHourMember: "11.00",
+        description: "Indoor pro court — climate controlled.",
+      },
+      {
+        name: "Pickleball Court 2",
+        sport: "pickleball",
+        type: "indoor",
+        pricePerHourPublic: "16.00",
+        pricePerHourMember: "12.50",
+        description: "Indoor tournament-grade surface.",
+      },
+      {
+        name: "Pickleball Court 3",
+        sport: "pickleball",
+        type: "indoor",
+        pricePerHourPublic: "18.00",
+        pricePerHourMember: "14.00",
+        description: "Indoor — reserved for ladder play.",
+      },
+      {
+        name: "Pickleball Court 4",
+        sport: "pickleball",
+        type: "indoor",
+        pricePerHourPublic: "15.00",
+        pricePerHourMember: "12.00",
+        description: "Indoor practice wall nearby.",
+      },
+      {
+        name: "Pickleball Court 5",
+        sport: "pickleball",
+        type: "indoor",
+        pricePerHourPublic: "17.00",
+        pricePerHourMember: "13.00",
+        description: "Indoor mid-court viewing.",
+      },
+      {
+        name: "Pickleball Court 6",
+        sport: "pickleball",
+        type: "indoor",
+        pricePerHourPublic: "19.00",
+        pricePerHourMember: "14.50",
+        description: "Indoor premium lighting.",
+      },
+      {
+        name: "Pickleball Court 7",
+        sport: "pickleball",
+        type: "indoor",
+        pricePerHourPublic: "13.00",
+        pricePerHourMember: "10.00",
+        description: "Indoor starter-friendly.",
+      },
+      {
+        name: "Pickleball Court 8",
+        sport: "pickleball",
+        type: "indoor",
+        pricePerHourPublic: "20.00",
+        pricePerHourMember: "15.00",
+        description: "Indoor flagship court.",
+      },
+      {
+        name: "Riverside Pickle 1",
+        sport: "pickleball",
+        type: "outdoor",
+        pricePerHourPublic: "10.00",
+        pricePerHourMember: "8.50",
+        description: "Outdoor — breezy riverside strip.",
+      },
+      {
+        name: "Riverside Pickle 2",
+        sport: "pickleball",
+        type: "outdoor",
+        pricePerHourPublic: "11.00",
+        pricePerHourMember: "9.00",
+        description: "Outdoor — portable net zone.",
+      },
+      {
+        name: "Riverside Pickle 3",
+        sport: "pickleball",
+        type: "outdoor",
+        pricePerHourPublic: "12.50",
+        pricePerHourMember: "9.75",
+        description: "Outdoor — shaded side.",
+      },
+      {
+        name: "Riverside Pickle 4",
+        sport: "pickleball",
+        type: "outdoor",
+        pricePerHourPublic: "9.00",
+        pricePerHourMember: "7.50",
+        description: "Outdoor — quick games.",
+      },
+    ];
+
+    const upsert = async (locationId: string, row: CourtSeed) => {
+      const media =
+        row.sport === "tennis"
+          ? pickTennisMedia(row.name)
+          : pickPbMedia(row.name);
+      const court = await this.courtRepo.findOne({
+        where: { locationId, name: row.name },
+      });
+      if (!court) {
+        await this.courtRepo.save(
+          this.courtRepo.create({
+            locationId,
+            name: row.name,
+            sport: row.sport,
+            type: row.type,
+            pricePerHourPublic: row.pricePerHourPublic,
+            pricePerHourMember: row.pricePerHourMember,
+            description: row.description,
+            imageUrl: media.imageUrl,
+            imageGallery: media.imageGallery,
+            mapEmbedUrl: MAP_EMBED,
+            status: "active",
+          }),
+        );
+        console.log(`[SeedService] Created court: ${row.name} @ ${locationId}`);
+        return;
+      }
+      await this.courtRepo.update(court.id, {
+        sport: row.sport,
+        type: row.type,
+        pricePerHourPublic: row.pricePerHourPublic,
+        pricePerHourMember: row.pricePerHourMember,
+        description: row.description,
+      });
+    };
+
+    for (const row of defCourts) {
+      await upsert(def.id, row);
+    }
+    for (const row of dpcCourts) {
+      await upsert(dpc.id, row);
+    }
+
+    console.log(
+      `[SeedService] Courts catalog: DEF ${defCourts.length} rows, DPC ${dpcCourts.length} rows (upserted).`,
+    );
+  }
+
+  /**
    * Private locations require active membership to book courts — seed a demo account.
    */
   private async seedPrivateClubDemoMember() {
@@ -771,64 +1114,82 @@ export class SeedService implements OnModuleInit {
     if (!org || !branch || !playerRole || !loc) return;
     if (loc.visibility !== LocationVisibility.PRIVATE) return;
 
-    const email = "private-club-demo@codyreserve.com";
     const passwordHash = await bcrypt.hash("Password123!", 10);
-    let user = await this.userRepo.findOne({
-      where: { email, organizationId: org.id },
-    });
-    if (!user) {
-      user = await this.userRepo.save(
-        this.userRepo.create({
-          organizationId: org.id,
-          branchId: branch.id,
-          roleId: playerRole.id,
-          email,
-          passwordHash,
-          fullName: "Private Club Demo Member",
-          phone: "+15555550999",
-          status: "active",
-          visibility: "public",
-        }),
-      );
-      console.log(
-        `[SeedService] Demo private-club user: ${email} / Password123!`,
-      );
-    }
+    const demoMembers: Array<{
+      email: string;
+      fullName: string;
+      phone: string;
+    }> = [
+      {
+        email: "private-club-demo@codyreserve.com",
+        fullName: "Private Club Demo Member",
+        phone: "+15555550999",
+      },
+      {
+        email: "pickleball-member2@codyreserve.com",
+        fullName: "Downtown Pickleball Member Two",
+        phone: "+15555550888",
+      },
+    ];
 
-    let membership = await this.membershipRepo.findOne({
-      where: { userId: user.id, locationId: loc.id },
-    });
-    if (!membership) {
-      const periodEnd = new Date();
-      periodEnd.setFullYear(periodEnd.getFullYear() + 1);
-      membership = await this.membershipRepo.save(
-        this.membershipRepo.create({
-          userId: user.id,
-          locationId: loc.id,
-          status: MembershipStatus.ACTIVE,
-          initiationPaidAt: new Date(),
-          currentPeriodStart: new Date(),
-          currentPeriodEnd: periodEnd,
-          lastMonthlyPaidAt: new Date(),
-        }),
-      );
-      const fee = loc.membershipInitiationFeeCents || 0;
-      if (fee > 0) {
-        await this.membershipTxRepo.save(
-          this.membershipTxRepo.create({
-            userLocationMembershipId: membership.id,
-            type: MembershipTransactionType.INITIATION,
-            amountCents: fee,
-            currency: "USD",
-            periodLabel: "seed-init",
-            externalPaymentId: "seed",
-            metadata: { source: "SeedService" },
+    for (const m of demoMembers) {
+      let user = await this.userRepo.findOne({
+        where: { email: m.email, organizationId: org.id },
+      });
+      if (!user) {
+        user = await this.userRepo.save(
+          this.userRepo.create({
+            organizationId: org.id,
+            branchId: branch.id,
+            roleId: playerRole.id,
+            email: m.email,
+            passwordHash,
+            fullName: m.fullName,
+            phone: m.phone,
+            status: "active",
+            visibility: "public",
           }),
         );
+        console.log(
+          `[SeedService] Demo private-club user: ${m.email} / Password123!`,
+        );
       }
-      console.log(
-        `[SeedService] Active membership for ${email} at ${loc.name}`,
-      );
+
+      let membership = await this.membershipRepo.findOne({
+        where: { userId: user.id, locationId: loc.id },
+      });
+      if (!membership) {
+        const periodEnd = new Date();
+        periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+        membership = await this.membershipRepo.save(
+          this.membershipRepo.create({
+            userId: user.id,
+            locationId: loc.id,
+            status: MembershipStatus.ACTIVE,
+            initiationPaidAt: new Date(),
+            currentPeriodStart: new Date(),
+            currentPeriodEnd: periodEnd,
+            lastMonthlyPaidAt: new Date(),
+          }),
+        );
+        const fee = loc.membershipInitiationFeeCents || 0;
+        if (fee > 0) {
+          await this.membershipTxRepo.save(
+            this.membershipTxRepo.create({
+              userLocationMembershipId: membership.id,
+              type: MembershipTransactionType.INITIATION,
+              amountCents: fee,
+              currency: "USD",
+              periodLabel: "seed-init",
+              externalPaymentId: "seed",
+              metadata: { source: "SeedService", userEmail: m.email },
+            }),
+          );
+        }
+        console.log(
+          `[SeedService] Active membership for ${m.email} at ${loc.name}`,
+        );
+      }
     }
   }
 
@@ -902,13 +1263,27 @@ export class SeedService implements OnModuleInit {
     const passwordHash = await bcrypt.hash("Password123!", 10);
     let autofillPhoneSeq = 20000;
 
+    console.log(
+      `[SeedService] Coach assignments: ${allCourts.length} courts × ~10–15 coaches each — this can take 1–3 minutes; progress per court below.`,
+    );
+
+    let courtIdx = 0;
     for (const court of allCourts) {
+      courtIdx += 1;
       const target = coachTargetForCourt(court.id);
-      let assigned = await this.userRepo.count({
-        where: { courtId: court.id },
-      });
-      while (assigned < target) {
-        const email = `autofill-${court.id}-slot${assigned}@codyreserve.com`;
+      /** Monotonic slot index — must not reuse `assigned` in email or we can infinite-loop when user already exists on this court. */
+      let nextSlot = 0;
+      const maxAttempts = target + 500;
+
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const assigned = await this.userRepo.count({
+          where: { courtId: court.id },
+        });
+        if (assigned >= target) break;
+
+        const email = `autofill-${court.id}-slot${nextSlot}@codyreserve.com`;
+        nextSlot += 1;
+
         let user = await this.userRepo.findOne({
           where: { email, organizationId: org.id },
         });
@@ -935,9 +1310,6 @@ export class SeedService implements OnModuleInit {
               hourlyRate: "42.00",
             }),
           );
-          console.log(
-            `[SeedService] Autofill coach for court "${court.name}" (${assigned + 1}/${target})`,
-          );
         } else {
           await this.userRepo.update(user.id, {
             courtId: court.id,
@@ -957,10 +1329,14 @@ export class SeedService implements OnModuleInit {
             );
           }
         }
-        assigned = await this.userRepo.count({
-          where: { courtId: court.id },
-        });
       }
+
+      const finalCount = await this.userRepo.count({
+        where: { courtId: court.id },
+      });
+      console.log(
+        `[SeedService] Court ${courtIdx}/${allCourts.length} "${court.name}": ${finalCount}/${target} coaches`,
+      );
     }
 
     console.log(

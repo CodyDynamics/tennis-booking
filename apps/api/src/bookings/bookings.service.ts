@@ -1,8 +1,13 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { CourtBookingHandler } from "./handlers/court-booking.handler";
 import { CoachSessionHandler } from "./handlers/coach-session.handler";
+import { CourtWizardAvailabilityService } from "./court-wizard-availability.service";
 import { CreateCourtBookingDto } from "./dto/create-court-booking.dto";
 import { CreateCoachSessionDto } from "./dto/create-coach-session.dto";
+import {
+  CourtWizardAvailabilityQueryDto,
+  CourtWizardWindowsQueryDto,
+} from "./dto/court-wizard-query.dto";
 import { BookingKind } from "./interfaces/booking-handler.interface";
 
 /**
@@ -16,6 +21,7 @@ export class BookingsService {
   constructor(
     private readonly courtBookingHandler: CourtBookingHandler,
     private readonly coachSessionHandler: CoachSessionHandler,
+    private readonly courtWizardAvailability: CourtWizardAvailabilityService,
   ) {}
 
   // ----- Court booking (sân, optional coach) -----
@@ -39,6 +45,7 @@ export class BookingsService {
       endTime: dto.endTime,
       coachId: dto.coachId,
       durationMinutes: duration,
+      locationBookingWindowId: dto.locationBookingWindowId,
     });
   }
 
@@ -52,6 +59,29 @@ export class BookingsService {
       date,
       slotMinutes ?? 60,
     );
+  }
+
+  /** Booking wizard: time windows for location + sport + indoor/outdoor. */
+  getWizardWindows(userId: string, q: CourtWizardWindowsQueryDto) {
+    return this.courtWizardAvailability.listBookingWindows(
+      userId,
+      q.locationId,
+      q.sport,
+      q.courtType,
+    );
+  }
+
+  /** Booking wizard: slot grid + courts that still have a free slot. */
+  getWizardAvailability(userId: string, q: CourtWizardAvailabilityQueryDto) {
+    return this.courtWizardAvailability.computeWizardAvailability({
+      userId,
+      locationId: q.locationId,
+      sport: q.sport,
+      courtType: q.courtType,
+      bookingDate: q.bookingDate,
+      windowId: q.windowId,
+      durationMinutes: q.durationMinutes,
+    });
   }
 
   async checkCourtAvailability(

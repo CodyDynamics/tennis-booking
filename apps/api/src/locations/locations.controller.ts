@@ -87,6 +87,20 @@ export class LocationsController {
     return this.locationsService.findAll(branchId, pageIndex, size);
   }
 
+  @Get(":id/membership")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth("JWT")
+  @ApiOperation({
+    summary:
+      "Membership status for current user at this location (for private club gating)",
+  })
+  getMembershipForUser(
+    @Param("id") id: string,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.locationsService.getMembershipForUser(id, user.id);
+  }
+
   @Get(":id")
   @ApiOperation({ summary: "Get location by id" })
   findOne(@Param("id") id: string) {

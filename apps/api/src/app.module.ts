@@ -25,6 +25,7 @@ import { Sport } from "./sports/entities/sport.entity";
 import { Coach } from "./coaches/entities/coach.entity";
 import { CourtBooking } from "./bookings/entities/court-booking.entity";
 import { CoachSession } from "./bookings/entities/coach-session.entity";
+import { BookingCommand } from "./bookings/entities/booking-command.entity";
 
 import { BranchesModule } from "./branches/branches.module";
 import { CourtsModule } from "./courts/courts.module";
@@ -69,6 +70,7 @@ import { RedisModule } from "./redis/redis.module";
           Coach,
           CourtBooking,
           CoachSession,
+          BookingCommand,
         ],
         // On Render/production, set DB_SYNC=true so TypeORM creates tables (no migrations yet). Can set DB_SYNC=false after first deploy.
         synchronize:
