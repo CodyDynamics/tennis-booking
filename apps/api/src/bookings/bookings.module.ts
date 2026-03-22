@@ -8,10 +8,11 @@ import { BookingsService } from "./bookings.service";
 import { BookingsController } from "./bookings.controller";
 import { CourtsModule } from "../courts/courts.module";
 import { CoachesModule } from "../coaches/coaches.module";
+import { UserLocationMembership } from "../memberships/entities/user-location-membership.entity";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([CourtBooking, CoachSession]),
+    TypeOrmModule.forFeature([CourtBooking, CoachSession, UserLocationMembership]),
     CourtsModule,
     CoachesModule,
   ],

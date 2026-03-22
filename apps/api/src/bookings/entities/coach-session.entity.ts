@@ -32,6 +32,9 @@ export class CoachSession {
   @Column({ type: "varchar", nullable: true })
   branchId: string | null;
 
+  @Column({ type: "uuid", nullable: true })
+  locationId: string | null;
+
   @Column()
   coachId: string;
 

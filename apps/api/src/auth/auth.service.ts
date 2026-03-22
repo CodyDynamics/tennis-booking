@@ -53,6 +53,7 @@ export class AuthService {
       password,
       fullName,
       phone,
+      homeAddress,
       organizationId,
       branchId,
       roleId,
@@ -84,6 +85,7 @@ export class AuthService {
         passwordHash,
         fullName,
         phone,
+        homeAddress: homeAddress ?? null,
         organizationId,
         branchId,
         roleId,
@@ -186,6 +188,8 @@ export class AuthService {
           fullName,
           googleId,
           roleId: defaultRole.id,
+          /** Placeholder until user completes profile; required by schema */
+          phone: "+10000000000",
         }),
       );
       user = (await this.userRepo.findOne({

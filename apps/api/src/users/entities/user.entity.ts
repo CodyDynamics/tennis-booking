@@ -35,8 +35,12 @@ export class User {
   @Column()
   fullName: string;
 
-  @Column({ type: "varchar", nullable: true })
-  phone: string | null;
+  /** Required for registered users; OAuth signups may use placeholder until profile completion */
+  @Column({ type: "varchar" })
+  phone: string;
+
+  @Column({ type: "text", nullable: true })
+  homeAddress: string | null;
 
   @Column({ type: "varchar", nullable: true })
   avatarUrl: string | null;

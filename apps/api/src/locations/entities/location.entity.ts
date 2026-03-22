@@ -8,6 +8,10 @@ import {
   JoinColumn,
 } from "typeorm";
 import { Branch } from "../../branches/entities/branch.entity";
+import {
+  LocationVisibility,
+  MemberCourtPriceBasis,
+} from "./location.enums";
 
 @Entity("locations")
 export class Location {
@@ -37,6 +41,31 @@ export class Location {
    */
   @Column({ type: "text", nullable: true })
   mapMarkers: string | null;
+
+  /** IANA timezone for slot generation (e.g. America/Chicago) */
+  @Column({ type: "varchar", default: "America/Chicago" })
+  timezone: string;
+
+  @Column({ type: "varchar", default: LocationVisibility.PUBLIC })
+  visibility: LocationVisibility;
+
+  /** One-time membership fee for private locations (cents) */
+  @Column({ type: "int", default: 0 })
+  membershipInitiationFeeCents: number;
+
+  /** Recurring monthly fee (cents) */
+  @Column({ type: "int", default: 0 })
+  membershipMonthlyFeeCents: number;
+
+  /** 0–100: discount off public hourly rate when memberCourtPriceBasis is discount_from_public */
+  @Column({ type: "int", default: 0 })
+  memberCourtDiscountPercent: number;
+
+  @Column({
+    type: "varchar",
+    default: MemberCourtPriceBasis.DISCOUNT_FROM_PUBLIC,
+  })
+  memberCourtPriceBasis: MemberCourtPriceBasis;
 
   @Column({ default: "active" })
   status: string; // active | inactive
