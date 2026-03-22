@@ -20,7 +20,32 @@ export class CreateCourtDto {
   @IsIn(["tennis", "pickleball"])
   sport?: string;
 
-  @ApiPropertyOptional({ example: 200000, minimum: 0, description: "Price per hour" })
+  @ApiPropertyOptional({
+    example: 20,
+    minimum: 0,
+    description: "Public (non-member) price per hour",
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  pricePerHourPublic?: number;
+
+  @ApiPropertyOptional({
+    example: 15,
+    minimum: 0,
+    description:
+      "Optional member hourly rate for this court (overrides location % discount)",
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  pricePerHourMember?: number | null;
+
+  @ApiPropertyOptional({
+    example: 20,
+    minimum: 0,
+    description: "Deprecated: same as pricePerHourPublic",
+  })
   @IsOptional()
   @IsNumber()
   @Min(0)
@@ -38,6 +63,7 @@ export class CreateCourtDto {
 
   @ApiPropertyOptional({ description: "JSON array of image URLs for gallery" })
   @IsOptional()
+  @IsString()
   imageGallery?: string;
 
   @ApiPropertyOptional({ description: "Google Maps embed URL" })

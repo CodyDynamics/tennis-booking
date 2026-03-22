@@ -91,15 +91,18 @@ export class CoachSessionHandler implements IBookingHandler {
 
     let courtId: string | null = null;
     let branchId: string | null = p.branchId ?? null;
+    let locationId: string | null = null;
     if (p.courtId) {
       const court = await this.courtsService.findOne(p.courtId);
       courtId = court.id;
       branchId = court.location?.branchId ?? null;
+      locationId = court.locationId ?? court.location?.id ?? null;
     }
 
     const session = this.coachSessionRepo.create({
       organizationId: p.organizationId ?? null,
       branchId,
+      locationId,
       coachId: p.coachId,
       courtId,
       bookedById: p.userId ?? p.bookedById ?? null,

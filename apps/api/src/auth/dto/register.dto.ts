@@ -5,6 +5,7 @@ import {
   MinLength,
   IsOptional,
   IsUUID,
+  IsNotEmpty,
 } from "class-validator";
 
 export class RegisterDto {
@@ -21,10 +22,10 @@ export class RegisterDto {
   @IsString()
   fullName: string;
 
-  @ApiPropertyOptional({ example: "0901234567", description: "Phone number" })
-  @IsOptional()
+  @ApiProperty({ example: "+15551234567", description: "Phone number (required)" })
   @IsString()
-  phone?: string;
+  @IsNotEmpty()
+  phone: string;
 
   @ApiPropertyOptional({ description: "Organization UUID" })
   @IsOptional()
@@ -39,4 +40,9 @@ export class RegisterDto {
   @ApiProperty({ description: "Role UUID" })
   @IsString()
   roleId: string;
+
+  @ApiPropertyOptional({ description: "Residential address (optional)" })
+  @IsOptional()
+  @IsString()
+  homeAddress?: string;
 }

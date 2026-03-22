@@ -21,10 +21,14 @@ export class CreateUserDto {
   @IsString()
   fullName: string;
 
-  @ApiPropertyOptional()
+  @ApiProperty({ example: "+15551234567" })
+  @IsString()
+  phone: string;
+
+  @ApiPropertyOptional({ description: "Residential address (optional)" })
   @IsOptional()
   @IsString()
-  phone?: string;
+  homeAddress?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

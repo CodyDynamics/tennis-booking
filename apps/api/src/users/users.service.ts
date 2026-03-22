@@ -66,7 +66,8 @@ export class UsersService {
         email: dto.email,
         passwordHash,
         fullName: dto.fullName,
-        phone: dto.phone ?? null,
+        phone: dto.phone,
+        homeAddress: dto.homeAddress ?? null,
         organizationId: dto.organizationId ?? null,
         branchId: dto.branchId ?? null,
         roleId: dto.roleId,
@@ -89,7 +90,10 @@ export class UsersService {
     const updates: Partial<User> = {
       ...(dto.fullName !== undefined && { fullName: dto.fullName }),
       ...(dto.email !== undefined && { email: dto.email }),
-      ...(dto.phone !== undefined && { phone: dto.phone ?? null }),
+      ...(dto.phone !== undefined && { phone: dto.phone }),
+      ...(dto.homeAddress !== undefined && {
+        homeAddress: dto.homeAddress ?? null,
+      }),
       ...(dto.organizationId !== undefined && { organizationId: dto.organizationId ?? null }),
       ...(dto.branchId !== undefined && { branchId: dto.branchId ?? null }),
       ...(dto.roleId !== undefined && { roleId: dto.roleId }),

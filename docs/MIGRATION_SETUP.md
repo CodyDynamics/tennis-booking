@@ -46,7 +46,24 @@ Backend uses a NestJS monorepo with `apps/` instead of `services/`.
 - **Connection:** Use env vars `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASS`, `DB_NAME` (default: localhost:5433, DB `booking_tennis`).
 - **Seed:** Default roles (admin, player, coach, student, parent) are created when the API starts (SeedService).
 
+### 3.1 `NOT NULL` columns & `synchronize` (e.g. `users.phone`)
+
+TypeORM **does not** run data backfills. If you change a column from **nullable → required** (`NOT NULL`) and old rows still have `NULL`, Postgres will error:
+
+`column "phone" of relation "users" contains null values`
+
+**Fix (pick one):**
+
+1. **Backfill then restart API** (keeps data): run SQL once, then let `DB_SYNC` apply the rest:
+   - See `scripts/sql/backfill-users-phone-before-not-null.sql`
+   - Example: `psql ... -f scripts/sql/backfill-users-phone-before-not-null.sql`
+
+2. **Formal migration** (production): a migration should (a) `UPDATE ... WHERE phone IS NULL`, (b) `ALTER COLUMN ... SET NOT NULL`. Same idea as (1), but versioned (TypeORM CLI migrations, Flyway, etc.).
+
+3. **Dev only — wipe DB**: drop/recreate database or `docker compose down -v` then `up` so sync builds a fresh schema (no NULL rows).
+
 ---
+
 
 ## 4. Summary
 

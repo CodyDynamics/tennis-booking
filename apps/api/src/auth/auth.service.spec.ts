@@ -55,6 +55,7 @@ describe("AuthService", () => {
     id: "user-uuid",
     email: "test@example.com",
     fullName: "Test User",
+    phone: "+15550000000",
     passwordHash: "hashed",
     roleId: "role-uuid",
     organizationId: null,
@@ -150,6 +151,7 @@ describe("AuthService", () => {
       email: "new@example.com",
       password: "password123",
       fullName: "New User",
+      phone: "+15550000001",
       roleId: "role-uuid",
     };
 

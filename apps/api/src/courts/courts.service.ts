@@ -7,6 +7,9 @@ import { Coach } from "../coaches/entities/coach.entity";
 import { CreateCourtDto } from "./dto/create-court.dto";
 import { UpdateCourtDto } from "./dto/update-court.dto";
 
+/** @deprecated Use pricePerHourPublic; kept on API responses for backward compatibility */
+export type CourtWithLegacyPrice = Court & { pricePerHour: number };
+
 @Injectable()
 export class CourtsService {
   constructor(
@@ -16,14 +19,33 @@ export class CourtsService {
     private readonly coachRepo: Repository<Coach>,
   ) {}
 
+  private withLegacyPrice(court: Court): CourtWithLegacyPrice {
+    return {
+      ...court,
+      pricePerHour: parseFloat(court.pricePerHourPublic),
+    };
+  }
+
   async create(dto: CreateCourtDto) {
+    const {
+      pricePerHour,
+      pricePerHourPublic,
+      pricePerHourMember,
+      ...rest
+    } = dto;
+    const pub = pricePerHourPublic ?? pricePerHour ?? 0;
     const court = this.courtRepo.create({
-      ...dto,
-      pricePerHour: String(dto.pricePerHour ?? 0),
+      ...rest,
+      pricePerHourPublic: String(pub),
+      pricePerHourMember:
+        pricePerHourMember !== undefined && pricePerHourMember !== null
+          ? String(pricePerHourMember)
+          : null,
       imageGallery: dto.imageGallery ?? null,
       mapEmbedUrl: dto.mapEmbedUrl ?? null,
     });
-    return this.courtRepo.save(court);
+    const saved = await this.courtRepo.save(court);
+    return this.withLegacyPrice(saved);
   }
 
   async findAll(
@@ -34,7 +56,7 @@ export class CourtsService {
     sport?: string,
     pageIndex = 0,
     pageSize = 500,
-  ): Promise<ListResponse<Court>> {
+  ): Promise<ListResponse<CourtWithLegacyPrice>> {
     const qb = this.courtRepo
       .createQueryBuilder("court")
       .leftJoinAndSelect("court.location", "location");
@@ -55,7 +77,12 @@ export class CourtsService {
       .skip(safePage * safeSize)
       .take(safeSize)
       .getMany();
-    return buildListResponse(data, total, safePage, safeSize);
+    return buildListResponse(
+      data.map((c) => this.withLegacyPrice(c)),
+      total,
+      safePage,
+      safeSize,
+    );
   }
 
   async findOne(id: string) {
@@ -70,19 +97,28 @@ export class CourtsService {
       .where("user.courtId = :courtId", { courtId: id })
       .orderBy("user.fullName", "ASC")
       .getMany();
-    return { ...court, coaches };
+    return { ...this.withLegacyPrice(court), coaches };
   }
 
   async update(id: string, dto: UpdateCourtDto) {
-    await this.findOne(id);
-    await this.courtRepo.update(id, {
-      ...dto,
-      ...(dto.pricePerHour !== undefined && {
-        pricePerHour: String(dto.pricePerHour),
-      }),
-      ...(dto.imageGallery !== undefined && { imageGallery: dto.imageGallery }),
-      ...(dto.mapEmbedUrl !== undefined && { mapEmbedUrl: dto.mapEmbedUrl }),
-    });
+    const row = await this.courtRepo.findOne({ where: { id } });
+    if (!row) throw new NotFoundException("Court not found");
+    const {
+      pricePerHour,
+      pricePerHourPublic,
+      pricePerHourMember,
+      ...rest
+    } = dto;
+    Object.assign(row, rest);
+    if (pricePerHourPublic !== undefined || pricePerHour !== undefined) {
+      const pub = pricePerHourPublic ?? pricePerHour;
+      row.pricePerHourPublic = String(pub ?? row.pricePerHourPublic);
+    }
+    if (pricePerHourMember !== undefined) {
+      row.pricePerHourMember =
+        pricePerHourMember === null ? null : String(pricePerHourMember);
+    }
+    await this.courtRepo.save(row);
     return this.findOne(id);
   }
 

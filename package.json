@@ -26,7 +26,8 @@
     "docker:logs:api": "docker-compose logs -f api",
     "docker:logs:postgres": "docker-compose logs -f postgres",
     "docker:logs:redis": "docker-compose logs -f redis",
-    "docker:build": "docker-compose build"
+    "docker:build": "docker-compose build",
+    "db:backfill-phone": "bash scripts/run-backfill-phone.sh"
   },
   "dependencies": {
     "@app/common": "*",

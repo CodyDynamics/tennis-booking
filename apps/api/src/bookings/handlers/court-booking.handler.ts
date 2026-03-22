@@ -8,10 +8,14 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { CoachesService } from "../../coaches/coaches.service";
 import { CourtsService } from "../../courts/courts.service";
+import { LocationVisibility } from "../../locations/entities/location.enums";
+import { MembershipStatus } from "../../memberships/entities/membership.enums";
+import { UserLocationMembership } from "../../memberships/entities/user-location-membership.entity";
 import {
   CourtBooking,
   CourtBookingStatus,
   CourtBookingType,
+  CourtPricingTier,
   PaymentStatus,
 } from "../entities/court-booking.entity";
 import {
@@ -24,6 +28,8 @@ import {
   CreateBookingResult,
   IBookingHandler,
 } from "../interfaces/booking-handler.interface";
+import { Location } from "../../locations/entities/location.entity";
+import { Court } from "../../courts/entities/court.entity";
 
 export interface CourtBookingCreateParams extends CreateBookingParams {
   courtId: string;
@@ -32,6 +38,21 @@ export interface CourtBookingCreateParams extends CreateBookingParams {
   endTime: string;
   coachId?: string;
   durationMinutes?: number;
+  /** Optional: link row to `location_booking_windows` when using wizard flow */
+  locationBookingWindowId?: string;
+}
+
+function parseHourlyMemberRate(court: Court, location: Location): number {
+  const publicRate = parseFloat(court.pricePerHourPublic);
+  if (
+    court.pricePerHourMember != null &&
+    court.pricePerHourMember !== "" &&
+    !Number.isNaN(parseFloat(court.pricePerHourMember))
+  ) {
+    return parseFloat(court.pricePerHourMember);
+  }
+  const pct = Math.min(100, Math.max(0, location.memberCourtDiscountPercent));
+  return publicRate * (1 - pct / 100);
 }
 
 @Injectable()
@@ -43,6 +64,8 @@ export class CourtBookingHandler implements IBookingHandler {
     private readonly courtBookingRepo: Repository<CourtBooking>,
     @InjectRepository(CoachSession)
     private readonly coachSessionRepo: Repository<CoachSession>,
+    @InjectRepository(UserLocationMembership)
+    private readonly membershipRepo: Repository<UserLocationMembership>,
     private readonly courtsService: CourtsService,
     private readonly coachesService: CoachesService,
   ) {}
@@ -140,9 +163,14 @@ export class CourtBookingHandler implements IBookingHandler {
 
   async create(params: CreateBookingParams): Promise<CreateBookingResult> {
     const p = params as CourtBookingCreateParams;
-    const court = await this.courtsService.findOne(p.courtId);
+    const courtPayload = await this.courtsService.findOne(p.courtId);
+    const { coaches: _coaches, pricePerHour: _legacy, ...court } = courtPayload;
     if (court.status !== "active") {
       throw new BadRequestException("Court is not available for booking");
+    }
+    const location = court.location;
+    if (!location) {
+      throw new BadRequestException("Court has no location");
     }
 
     const startMin = this.parseTimeToMinutes(p.startTime);
@@ -164,9 +192,44 @@ export class CourtBookingHandler implements IBookingHandler {
       );
     }
 
+    let membership: UserLocationMembership | null = null;
+    if (location.visibility === LocationVisibility.PRIVATE) {
+      membership = await this.membershipRepo.findOne({
+        where: {
+          userId: p.userId,
+          locationId: location.id,
+          status: MembershipStatus.ACTIVE,
+        },
+      });
+      if (!membership) {
+        throw new ForbiddenException(
+          "An active membership is required to book courts at this private location",
+        );
+      }
+    }
+
+    const pricingTier =
+      location.visibility === LocationVisibility.PRIVATE
+        ? CourtPricingTier.MEMBER
+        : CourtPricingTier.PUBLIC;
+
+    const publicHourly = parseFloat(court.pricePerHourPublic);
+    let courtHourly = publicHourly;
+    let discountAmountNum: number | null = null;
+    const unitSnapshot = publicHourly.toFixed(2);
+
+    if (pricingTier === CourtPricingTier.MEMBER) {
+      courtHourly = parseHourlyMemberRate(court, location);
+      const hours = durationMinutes / 60;
+      discountAmountNum = Math.max(
+        0,
+        publicHourly * hours - courtHourly * hours,
+      );
+    }
+
     let coachId: string | null = null;
     let bookingType = CourtBookingType.COURT_ONLY;
-    let totalPrice = parseFloat(court.pricePerHour) * (durationMinutes / 60);
+    let totalPrice = courtHourly * (durationMinutes / 60);
 
     if (p.coachId) {
       const coach = await this.coachesService.findOne(p.coachId);
@@ -178,6 +241,17 @@ export class CourtBookingHandler implements IBookingHandler {
     const booking = this.courtBookingRepo.create({
       organizationId: p.organizationId ?? null,
       branchId: p.branchId ?? court.location?.branchId ?? null,
+      locationId: location.id,
+      sport: court.sport,
+      courtType: court.type,
+      locationBookingWindowId: p.locationBookingWindowId ?? null,
+      pricingTier,
+      unitPricePerHourSnapshot: unitSnapshot,
+      discountAmount:
+        discountAmountNum != null ? discountAmountNum.toFixed(2) : null,
+      userLocationMembershipId: membership?.id ?? null,
+      bookingStartAt: null,
+      bookingEndAt: null,
       courtId: p.courtId,
       userId: p.userId,
       coachId,

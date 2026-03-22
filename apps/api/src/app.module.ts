@@ -17,7 +17,10 @@ import { RefreshToken } from "./auth/entities/refresh-token.entity";
 import { Branch } from "./branches/entities/branch.entity";
 import { Organization } from "./organizations/entities/organization.entity";
 import { Location } from "./locations/entities/location.entity";
+import { LocationBookingWindow } from "./locations/entities/location-booking-window.entity";
 import { Court } from "./courts/entities/court.entity";
+import { UserLocationMembership } from "./memberships/entities/user-location-membership.entity";
+import { MembershipTransaction } from "./memberships/entities/membership-transaction.entity";
 import { Sport } from "./sports/entities/sport.entity";
 import { Coach } from "./coaches/entities/coach.entity";
 import { CourtBooking } from "./bookings/entities/court-booking.entity";
@@ -58,7 +61,10 @@ import { RedisModule } from "./redis/redis.module";
           Branch,
           Organization,
           Location,
+          LocationBookingWindow,
           Court,
+          UserLocationMembership,
+          MembershipTransaction,
           Sport,
           Coach,
           CourtBooking,

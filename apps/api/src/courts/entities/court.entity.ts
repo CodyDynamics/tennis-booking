@@ -26,8 +26,16 @@ export class Court {
   @Column({ type: "varchar", default: "tennis" })
   sport: string; // tennis | pickleball
 
+  /** Standard (walk-in / non-member) hourly rate */
   @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })
-  pricePerHour: string;
+  pricePerHourPublic: string;
+
+  /**
+   * If set, used as member hourly rate for this court (overrides location % discount).
+   * Null = derive from pricePerHourPublic + location.memberCourtDiscountPercent.
+   */
+  @Column({ type: "decimal", precision: 12, scale: 2, nullable: true })
+  pricePerHourMember: string | null;
 
   @Column({ type: "text", nullable: true })
   description: string | null;

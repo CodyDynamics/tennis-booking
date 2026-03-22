@@ -1,29 +1,29 @@
-# Cấu hình Email (Gmail) & Lấy App Password
+# Email setup (Gmail) & App Password
 
-Backend dùng Gmail SMTP để gửi email (quên mật khẩu, OTP đăng nhập, v.v.). Gmail **không cho phép** dùng mật khẩu đăng nhập thông thường cho ứng dụng bên thứ ba, nên bạn cần tạo **App Password**.
+The backend uses **Gmail SMTP** for transactional email (password reset, login OTP, etc.). Gmail **does not allow** normal account passwords for third-party apps — you must create an **App Password**.
 
-## Cách lấy Gmail App Password (EMAIL_PASSWORD)
+## Getting a Gmail App Password (`EMAIL_PASSWORD`)
 
-### Bước 1: Bật xác minh 2 bước (2-Step Verification)
+### Step 1: Enable 2-Step Verification
 
-1. Vào [Google Account](https://myaccount.google.com/) → **Security**.
-2. Trong mục **How you sign in to Google**, chọn **2-Step Verification**.
-3. Bật 2-Step Verification và hoàn tất các bước (số điện thoại, mã xác minh).
+1. Open [Google Account](https://myaccount.google.com/) → **Security**.
+2. Under **How you sign in to Google**, choose **2-Step Verification**.
+3. Turn on 2-Step Verification and complete the steps (phone, verification codes).
 
-### Bước 2: Tạo App Password (Mật khẩu ứng dụng)
+### Step 2: Create an App Password
 
-**Lưu ý:** Mục "App passwords" / "Mật khẩu ứng dụng" **không nằm** trong danh sách chính của trang Security. Bạn phải **vào trong** mục **Xác minh 2 bước** (2-Step Verification) mới thấy.
+**Note:** **App passwords** are **not** on the main Security list. Open **2-Step Verification** first — the App passwords option appears **inside** that page.
 
-1. Vào [Google Account](https://myaccount.google.com/) → **Bảo mật** (Security).
-2. Bấm vào **Xác minh 2 bước** (2-Step Verification) — dòng có ghi "Bật từ …".
-3. Trong trang **Xác minh 2 bước**, **cuộn xuống cuối trang** → tìm và bấm **Mật khẩu ứng dụng** (App passwords).
-4. Ở **Select app** chọn **Mail**, ở **Select device** chọn **Other (Custom name)** và đặt tên (ví dụ: `Booking Tennis Backend`).
-5. Bấm **Generate** / **Tạo**. Google sẽ hiển thị **mật khẩu 16 ký tự** (dạng `xxxx xxxx xxxx xxxx`).
+1. Go to [Google Account](https://myaccount.google.com/) → **Security**.
+2. Open **2-Step Verification** (line showing it is enabled, e.g. “On since …”).
+3. On the **2-Step Verification** page, **scroll to the bottom** → open **App passwords**.
+4. Under **Select app**, choose **Mail**; under **Select device**, choose **Other (Custom name)** and enter a name (e.g. `Booking Tennis Backend`).
+5. Click **Generate**. Google shows a **16-character password** (format `xxxx xxxx xxxx xxxx`).
 
-### Bước 3: Cấu hình trong `.env`
+### Step 3: Configure `.env`
 
-- **EMAIL_USER**: địa chỉ Gmail của bạn (ví dụ: `your-email@gmail.com`).
-- **EMAIL_PASSWORD**: dán **App Password** vừa tạo (có thể bỏ dấu cách, ví dụ: `abcdefghijklmnop`).
+- **EMAIL_USER**: your Gmail address (e.g. `your-email@gmail.com`).
+- **EMAIL_PASSWORD**: paste the **App Password** (spaces optional, e.g. `abcdefghijklmnop`).
 
 ```env
 EMAIL_HOST=smtp.gmail.com
@@ -34,9 +34,9 @@ EMAIL_PASSWORD=abcdefghijklmnop
 EMAIL_FROM=noreply@booking-tennis.com
 ```
 
-Sau khi lưu `.env`, khởi động lại backend và thử gửi email (quên mật khẩu hoặc OTP đăng nhập).
+After saving `.env`, restart the backend and try sending mail (forgot password or login OTP).
 
-## Lưu ý
+## Notes
 
-- App Password **không phải** mật khẩu đăng nhập Gmail.
-- Nếu đổi mật khẩu Google hoặc tắt 2-Step Verification, App Password có thể bị vô hiệu; khi đó cần tạo App Password mới.
+- An App Password is **not** your normal Gmail password.
+- If you change your Google password or disable 2-Step Verification, App Passwords may stop working — create a new App Password if needed.

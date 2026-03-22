@@ -72,6 +72,7 @@ describe("AuthController", () => {
         email: "test@example.com",
         password: "password123",
         fullName: "Test",
+        phone: "+15550000000",
         roleId: "role-uuid",
       };
       mockAuthService.register.mockResolvedValue({

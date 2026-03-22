@@ -8,6 +8,9 @@ import { CourtsModule } from "../courts/courts.module";
 import { Sport } from "../sports/entities/sport.entity";
 import { User } from "../users/entities/user.entity";
 import { Coach } from "../coaches/entities/coach.entity";
+import { LocationBookingWindow } from "../locations/entities/location-booking-window.entity";
+import { UserLocationMembership } from "../memberships/entities/user-location-membership.entity";
+import { MembershipTransaction } from "../memberships/entities/membership-transaction.entity";
 import { SeedService } from "./seed.service";
 
 @Module({
@@ -17,7 +20,14 @@ import { SeedService } from "./seed.service";
     BranchesModule,
     LocationsModule,
     CourtsModule,
-    TypeOrmModule.forFeature([Sport, User, Coach]),
+    TypeOrmModule.forFeature([
+      Sport,
+      User,
+      Coach,
+      LocationBookingWindow,
+      UserLocationMembership,
+      MembershipTransaction,
+    ]),
   ],
   providers: [SeedService],
   exports: [],
