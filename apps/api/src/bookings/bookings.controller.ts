@@ -20,6 +20,10 @@ import {
 import { BookingsService } from "./bookings.service";
 import { CreateCourtBookingDto } from "./dto/create-court-booking.dto";
 import { CreateCoachSessionDto } from "./dto/create-coach-session.dto";
+import {
+  CourtWizardAvailabilityQueryDto,
+  CourtWizardWindowsQueryDto,
+} from "./dto/court-wizard-query.dto";
 import { JwtAuthGuard } from "@app/common";
 import { CurrentUser } from "@app/common";
 
@@ -27,6 +31,36 @@ import { CurrentUser } from "@app/common";
 @Controller("bookings")
 export class BookingsController {
   constructor(private readonly bookingsService: BookingsService) {}
+
+  @Get("court/wizard/windows")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth("JWT")
+  @ApiOperation({
+    summary:
+      "Booking wizard: list time windows (location_booking_windows) for sport + indoor/outdoor",
+  })
+  @ApiResponse({ status: 200, description: "Array of window configs" })
+  getCourtWizardWindows(
+    @CurrentUser() user: { id: string },
+    @Query() query: CourtWizardWindowsQueryDto,
+  ) {
+    return this.bookingsService.getWizardWindows(user.id, query);
+  }
+
+  @Get("court/wizard/availability")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth("JWT")
+  @ApiOperation({
+    summary:
+      "Booking wizard: slots on grid inside window + courts with at least one free slot",
+  })
+  @ApiResponse({ status: 200, description: "slots + courts summaries" })
+  getCourtWizardAvailability(
+    @CurrentUser() user: { id: string },
+    @Query() query: CourtWizardAvailabilityQueryDto,
+  ) {
+    return this.bookingsService.getWizardAvailability(user.id, query);
+  }
 
   @Post("court")
   @UseGuards(JwtAuthGuard)

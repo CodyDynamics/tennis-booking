@@ -42,4 +42,9 @@ export class CreateCourtBookingDto {
   @IsInt()
   @Min(15)
   durationMinutes?: number;
+
+  @ApiPropertyOptional({ description: "location_booking_windows.id when using the booking wizard" })
+  @IsOptional()
+  @IsUUID()
+  locationBookingWindowId?: string;
 }

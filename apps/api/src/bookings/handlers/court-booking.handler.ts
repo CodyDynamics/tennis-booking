@@ -1,11 +1,12 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { InjectDataSource, InjectRepository } from "@nestjs/typeorm";
+import { DataSource, QueryFailedError, Repository } from "typeorm";
 import { CoachesService } from "../../coaches/coaches.service";
 import { CourtsService } from "../../courts/courts.service";
 import { LocationVisibility } from "../../locations/entities/location.enums";
@@ -30,6 +31,10 @@ import {
 } from "../interfaces/booking-handler.interface";
 import { Location } from "../../locations/entities/location.entity";
 import { Court } from "../../courts/entities/court.entity";
+import {
+  wallClockMinutesNowInTimeZone,
+  ymdTodayInIanaTimeZone,
+} from "../utils/location-booking-dates";
 
 export interface CourtBookingCreateParams extends CreateBookingParams {
   courtId: string;
@@ -68,7 +73,37 @@ export class CourtBookingHandler implements IBookingHandler {
     private readonly membershipRepo: Repository<UserLocationMembership>,
     private readonly courtsService: CourtsService,
     private readonly coachesService: CoachesService,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
   ) {}
+
+  /**
+   * Wall-clock date+time in location TZ → UTC instants (Postgres rules, DST-safe).
+   */
+  private async wallRangeToUtc(
+    bookingDate: string,
+    startTime: string,
+    endTime: string,
+    ianaTimezone: string,
+  ): Promise<{ start: Date; end: Date }> {
+    const d = bookingDate.slice(0, 10);
+    const pad = (t: string) => (t.length <= 5 ? `${t}:00` : t);
+    const rows = (await this.dataSource.query(
+      `SELECT
+        (($1::text || ' ' || $2::text)::timestamp AT TIME ZONE $3) AS "startAt",
+        (($1::text || ' ' || $4::text)::timestamp AT TIME ZONE $3) AS "endAt"`,
+      [d, pad(startTime), ianaTimezone, pad(endTime)],
+    )) as { startAt: Date; endAt: Date }[];
+    return { start: rows[0].startAt, end: rows[0].endAt };
+  }
+
+  private isOverlapConstraintViolation(err: unknown): boolean {
+    if (!(err instanceof QueryFailedError)) return false;
+    const code = (err as QueryFailedError & { driverError?: { code?: string } })
+      .driverError?.code;
+    /** 23P01 = exclusion_violation; 23505 = unique_violation (if you add a surrogate unique key). */
+    return code === "23P01" || code === "23505";
+  }
 
   private parseTimeToMinutes(time: string): number {
     const [h, m] = time.split(":").map(Number);
@@ -180,6 +215,20 @@ export class CourtBookingHandler implements IBookingHandler {
     }
     const durationMinutes = p.durationMinutes ?? endMin - startMin;
 
+    const dateStr = p.bookingDate.slice(0, 10);
+    const todayYmd = ymdTodayInIanaTimeZone(location.timezone);
+    if (dateStr < todayYmd) {
+      throw new BadRequestException("Cannot book a past date at this venue");
+    }
+    if (dateStr === todayYmd) {
+      const nowMin = wallClockMinutesNowInTimeZone(location.timezone);
+      if (startMin < nowMin) {
+        throw new BadRequestException(
+          "This start time has already passed at the venue",
+        );
+      }
+    }
+
     const available = await this.isCourtAvailable(
       p.courtId,
       p.bookingDate,
@@ -238,6 +287,14 @@ export class CourtBookingHandler implements IBookingHandler {
       totalPrice += parseFloat(coach.hourlyRate) * (durationMinutes / 60);
     }
 
+    const { start: bookingStartAt, end: bookingEndAt } =
+      await this.wallRangeToUtc(
+        p.bookingDate,
+        p.startTime,
+        p.endTime,
+        location.timezone,
+      );
+
     const booking = this.courtBookingRepo.create({
       organizationId: p.organizationId ?? null,
       branchId: p.branchId ?? court.location?.branchId ?? null,
@@ -250,8 +307,8 @@ export class CourtBookingHandler implements IBookingHandler {
       discountAmount:
         discountAmountNum != null ? discountAmountNum.toFixed(2) : null,
       userLocationMembershipId: membership?.id ?? null,
-      bookingStartAt: null,
-      bookingEndAt: null,
+      bookingStartAt,
+      bookingEndAt,
       courtId: p.courtId,
       userId: p.userId,
       coachId,
@@ -265,7 +322,17 @@ export class CourtBookingHandler implements IBookingHandler {
       bookingStatus: CourtBookingStatus.CONFIRMED,
     });
 
-    const saved = await this.courtBookingRepo.save(booking);
+    let saved: CourtBooking;
+    try {
+      saved = await this.courtBookingRepo.save(booking);
+    } catch (e) {
+      if (this.isOverlapConstraintViolation(e)) {
+        throw new ConflictException(
+          "That slot was just taken. Please pick another time or court.",
+        );
+      }
+      throw e;
+    }
     return {
       id: saved.id,
       kind: "court",
