@@ -1,8 +1,10 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { Brackets, Repository } from "typeorm";
 import { buildListResponse, ListResponse } from "@app/common";
 import { Location } from "./entities/location.entity";
+import { LocationVisibility } from "./entities/location.enums";
+import { MembershipStatus } from "../memberships/entities/membership.enums";
 import { CreateLocationDto } from "./dto/create-location.dto";
 import { UpdateLocationDto } from "./dto/update-location.dto";
 
@@ -38,9 +40,59 @@ export class LocationsService {
     return buildListResponse(data, total, safePage, safeSize);
   }
 
+  /**
+   * Active locations visible to everyone (maps, marketing). Excludes private clubs.
+   */
+  async findPublicActive(
+    pageIndex = 0,
+    pageSize = 500,
+  ): Promise<ListResponse<Location>> {
+    const qb = this.locationRepo
+      .createQueryBuilder("loc")
+      .where("loc.visibility = :vis", { vis: LocationVisibility.PUBLIC })
+      .andWhere("loc.status = :status", { status: "active" })
+      .orderBy("loc.name", "ASC");
+    const safePage = Math.max(0, pageIndex);
+    const safeSize = Math.min(500, Math.max(1, pageSize));
+    const total = await qb.clone().getCount();
+    const data = await qb
+      .skip(safePage * safeSize)
+      .take(safeSize)
+      .getMany();
+    return buildListResponse(data, total, safePage, safeSize);
+  }
+
+  /**
+   * Locations the user may book: all active public + active private where they have an active membership.
+   */
+  async findBookableForUser(userId: string): Promise<Location[]> {
+    return this.locationRepo
+      .createQueryBuilder("loc")
+      .where("loc.status = :status", { status: "active" })
+      .andWhere(
+        new Brackets((qb) => {
+          qb.where("loc.visibility = :pub", {
+            pub: LocationVisibility.PUBLIC,
+          }).orWhere(
+            `loc.visibility = :priv AND EXISTS (
+              SELECT 1 FROM user_location_memberships m
+              WHERE m."locationId" = loc.id AND m."userId" = :userId AND m.status = :mstat
+            )`,
+            {
+              priv: LocationVisibility.PRIVATE,
+              userId,
+              mstat: MembershipStatus.ACTIVE,
+            },
+          );
+        }),
+      )
+      .orderBy("loc.name", "ASC")
+      .getMany();
+  }
+
   async findOne(id: string) {
     const location = await this.locationRepo.findOne({ where: { id } });
-    if (!location) throw new NotFoundException('Location not found');
+    if (!location) throw new NotFoundException("Location not found");
     return location;
   }
 
