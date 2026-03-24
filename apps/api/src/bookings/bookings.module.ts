@@ -8,6 +8,7 @@ import { CoachSessionHandler } from "./handlers/coach-session.handler";
 import { BookingsService } from "./bookings.service";
 import { BookingsController } from "./bookings.controller";
 import { CourtWizardAvailabilityService } from "./court-wizard-availability.service";
+import { CourtHoldGateway } from "./court-hold.gateway";
 import { CourtsModule } from "../courts/courts.module";
 import { CoachesModule } from "../coaches/coaches.module";
 import { UserLocationMembership } from "../memberships/entities/user-location-membership.entity";
@@ -35,7 +36,8 @@ import { Court } from "../courts/entities/court.entity";
     CoachSessionHandler,
     CourtWizardAvailabilityService,
     BookingsService,
+    CourtHoldGateway,
   ],
-  exports: [BookingsService],
+  exports: [BookingsService, CourtHoldGateway],
 })
 export class BookingsModule {}

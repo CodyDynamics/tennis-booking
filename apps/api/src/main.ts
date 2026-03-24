@@ -1,6 +1,7 @@
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { IoAdapter } from "@nestjs/platform-socket.io";
 import * as cookieParser from "cookie-parser";
 import { Request, Response, NextFunction } from "express";
 import { AppModule } from "./app.module";
@@ -14,6 +15,7 @@ const cookieParserMiddleware =
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.useWebSocketAdapter(new IoAdapter(app));
   // Force SeedService to run (it is not injected elsewhere, so would never be created)
   await app.get(SeedService);
   app.use(cookieParserMiddleware());
