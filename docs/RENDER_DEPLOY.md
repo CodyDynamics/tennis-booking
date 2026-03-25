@@ -1,5 +1,13 @@
 # Deploying the backend to Render.com
 
+## Web Service: build & start
+
+- **Root Directory:** `backend` (when the repo has `backend/` at the repo root).
+- **Build Command:** `pnpm install && pnpm run build` (or `npm ci && npm run build` if you use npm on Render).
+- **Start Command:** `pnpm run start:prod` (runs `node dist/apps/api/src/main`).
+
+`pnpm run build` runs **`nest build`**, which outputs **`dist/apps/api/src/main.js`**. If you ever switch the build to **`nest build api`**, the emitted path is different — keep build and `start:prod` in `package.json` aligned.
+
 ## Error: `relation "sports" does not exist`
 
 On production (Render), the app usually has **TypeORM synchronize** disabled, so tables are **not** auto-created. A new Render Postgres database is empty → when `SeedService` runs (or any API hits the `sports` table), Postgres returns **`relation "sports" does not exist`**.
