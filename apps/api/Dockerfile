@@ -18,5 +18,9 @@ RUN mkdir -p /app/apps/api/keys
 
 EXPOSE 3000
 
+ENV HOST=0.0.0.0
+ENV PORT=3000
+
 WORKDIR /app
-CMD ["node", "dist/apps/api/src/main.js"]
+# Nest monorepo emit: outDir dist/apps/api + repo paths → apps/api/src/main.js
+CMD ["node", "dist/apps/api/apps/api/src/main.js"]
