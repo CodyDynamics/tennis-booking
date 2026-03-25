@@ -1,12 +1,29 @@
 import { NestFactory } from "@nestjs/core";
-import { ValidationPipe } from "@nestjs/common";
+import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { IoAdapter } from "@nestjs/platform-socket.io";
+import { Server as SocketIoServer } from "socket.io";
+import type { Server as HttpServer } from "http";
 import * as cookieParser from "cookie-parser";
 import { Request, Response, NextFunction } from "express";
 import { AppModule } from "./app.module";
 import { HttpExceptionFilter } from "@app/common";
 import { SeedService } from "./database/seed.service";
+
+/** Bind Socket.IO to the same HTTP server as Nest (required for Docker / single-port). */
+class AppSocketIoAdapter extends IoAdapter {
+  constructor(private readonly nestApp: INestApplication) {
+    super(nestApp);
+  }
+
+  createIOServer(port: number, options?: Record<string, unknown>) {
+    const httpServer = this.nestApp.getHttpServer() as HttpServer | undefined;
+    if (httpServer) {
+      return new SocketIoServer(httpServer, options);
+    }
+    return super.createIOServer(port, options);
+  }
+}
 
 // cookie-parser is CommonJS; default import breaks on Render (.default is not a function)
 const cookieParserMiddleware =
@@ -15,7 +32,7 @@ const cookieParserMiddleware =
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.useWebSocketAdapter(new IoAdapter(app));
+  app.useWebSocketAdapter(new AppSocketIoAdapter(app));
   // Force SeedService to run (it is not injected elsewhere, so would never be created)
   await app.get(SeedService);
   app.use(cookieParserMiddleware());
@@ -41,8 +58,13 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter());
 
   const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+  const corsOriginsExtra = (process.env.CORS_ORIGINS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
   const allowedOrigins = [
     frontendUrl,
+    ...corsOriginsExtra,
     "https://tennis-booking-frontend-red.vercel.app",
     "http://localhost:3000",
     "http://localhost:3001",
@@ -80,14 +102,25 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup("api", app, document);
 
-  const port = process.env.PORT || process.env.GATEWAY_PORT || 3000;
-  await app.listen(port);
+  const port = Number.parseInt(
+    String(process.env.PORT ?? process.env.GATEWAY_PORT ?? 3000),
+    10,
+  );
+  const host = (process.env.HOST?.trim() || "0.0.0.0").trim();
+  if (!Number.isFinite(port) || port <= 0) {
+    throw new Error(`Invalid PORT: ${process.env.PORT}`);
+  }
+  await app.listen(port, host);
   const isProduction = process.env.NODE_ENV === "production";
-  const baseUrl = isProduction ? `port ${port}` : `http://localhost:${port}`;
-  console.log(`🚀 API is running on: ${baseUrl}`);
+  console.log(
+    `🚀 API listening on http://${host}:${port} (map host port in Docker; try http://127.0.0.1:${port} if localhost fails)`,
+  );
   if (!isProduction) {
-    console.log(`📚 Swagger: http://localhost:${port}/api`);
+    console.log(`📚 Swagger (this machine): http://localhost:${port}/api`);
   }
 }
 
-bootstrap();
+bootstrap().catch((err) => {
+  console.error("Bootstrap failed:", err);
+  process.exit(1);
+});
