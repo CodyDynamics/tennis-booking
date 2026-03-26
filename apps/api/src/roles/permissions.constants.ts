@@ -6,6 +6,7 @@ export const PERMISSION_RESOURCES = [
   { resource: "branches", label: "Branches", actions: ["view", "create", "update", "delete"] as const },
   { resource: "organizations", label: "Organizations", actions: ["view", "create", "update", "delete"] as const },
   { resource: "locations", label: "Locations", actions: ["view", "create", "update", "delete"] as const },
+  { resource: "sports", label: "Sports", actions: ["view", "create", "update", "delete"] as const },
   { resource: "bookings", label: "Bookings", actions: ["view", "create", "cancel"] as const },
 ] as const;
 

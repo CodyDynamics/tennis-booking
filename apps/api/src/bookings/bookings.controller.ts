@@ -19,10 +19,12 @@ import {
 } from "@nestjs/swagger";
 import { BookingsService } from "./bookings.service";
 import { CreateCourtBookingDto } from "./dto/create-court-booking.dto";
+import { CreateCourtSlotBookingDto } from "./dto/create-court-slot-booking.dto";
 import { CreateCoachSessionDto } from "./dto/create-coach-session.dto";
 import {
   CourtWizardAvailabilityQueryDto,
   CourtWizardWindowsQueryDto,
+  CourtSlotQueryDto,
 } from "./dto/court-wizard-query.dto";
 import { JwtAuthGuard } from "@app/common";
 import { CurrentUser } from "@app/common";
@@ -60,6 +62,39 @@ export class BookingsController {
     @Query() query: CourtWizardAvailabilityQueryDto,
   ) {
     return this.bookingsService.getWizardAvailability(user.id, query);
+  }
+
+  @Get("court/wizard/slots")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth("JWT")
+  @ApiOperation({
+    summary: "New flow: available time slots for date+duration (no window selection, no court names)",
+  })
+  @ApiResponse({ status: 200, description: "{ slots: [{ startTime, endTime, availableCount, totalCount }] }" })
+  getCourtSlots(
+    @CurrentUser() user: { id: string },
+    @Query() query: CourtSlotQueryDto,
+  ) {
+    return this.bookingsService.getAvailableSlots(user.id, query);
+  }
+
+  @Post("court/slot")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth("JWT")
+  @ApiOperation({ summary: "New flow: book a slot (system assigns random available court)" })
+  @ApiBody({ type: CreateCourtSlotBookingDto })
+  @ApiResponse({ status: 201, description: "Booking created with system-assigned court" })
+  @ApiResponse({ status: 409, description: "All courts taken for this slot" })
+  createSlotBooking(
+    @Body() dto: CreateCourtSlotBookingDto,
+    @CurrentUser() user: { id: string; organizationId?: string; branchId?: string },
+  ) {
+    return this.bookingsService.createSlotBooking(
+      user.id,
+      dto,
+      user.organizationId,
+      user.branchId,
+    );
   }
 
   @Post("court")

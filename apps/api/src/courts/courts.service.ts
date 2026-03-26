@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { buildListResponse, ListResponse } from "@app/common";
@@ -6,6 +6,7 @@ import { Court } from "./entities/court.entity";
 import { Coach } from "../coaches/entities/coach.entity";
 import { CreateCourtDto } from "./dto/create-court.dto";
 import { UpdateCourtDto } from "./dto/update-court.dto";
+import { LocationBookingWindow } from "../locations/entities/location-booking-window.entity";
 
 /** @deprecated Use pricePerHourPublic; kept on API responses for backward compatibility */
 export type CourtWithLegacyPrice = Court & { pricePerHour: number };
@@ -17,7 +18,65 @@ export class CourtsService {
     private readonly courtRepo: Repository<Court>,
     @InjectRepository(Coach)
     private readonly coachRepo: Repository<Coach>,
+    @InjectRepository(LocationBookingWindow)
+    private readonly bookingWindowRepo: Repository<LocationBookingWindow>,
   ) {}
+
+  private validateWindowRange(start?: string, end?: string) {
+    if (!start && !end) return;
+    if (!start || !end) {
+      throw new BadRequestException(
+        "windowStartTime and windowEndTime must be provided together",
+      );
+    }
+    if (end <= start) {
+      throw new BadRequestException("windowEndTime must be after windowStartTime");
+    }
+  }
+
+  private async upsertCourtWindow(
+    court: Court,
+    dto: { windowStartTime?: string; windowEndTime?: string },
+  ) {
+    this.validateWindowRange(dto.windowStartTime, dto.windowEndTime);
+    if (!dto.windowStartTime || !dto.windowEndTime) return;
+
+    const existing = await this.bookingWindowRepo.findOne({
+      where: {
+        courtId: court.id,
+        locationId: court.locationId ?? "",
+        sport: court.sport,
+        courtType: court.type,
+      },
+      order: { sortOrder: "ASC" },
+    });
+
+    if (existing) {
+      await this.bookingWindowRepo.update(existing.id, {
+        windowStartTime: dto.windowStartTime,
+        windowEndTime: dto.windowEndTime,
+        allowedDurationMinutes: "[30,60,90]",
+        slotGridMinutes: 30,
+        isActive: true,
+      });
+      return;
+    }
+
+    await this.bookingWindowRepo.save(
+      this.bookingWindowRepo.create({
+        locationId: court.locationId ?? "",
+        courtId: court.id,
+        sport: court.sport,
+        courtType: court.type,
+        windowStartTime: dto.windowStartTime,
+        windowEndTime: dto.windowEndTime,
+        allowedDurationMinutes: "[30,60,90]",
+        slotGridMinutes: 30,
+        sortOrder: 0,
+        isActive: true,
+      }),
+    );
+  }
 
   private withLegacyPrice(court: Court): CourtWithLegacyPrice {
     return {
@@ -45,6 +104,7 @@ export class CourtsService {
       mapEmbedUrl: dto.mapEmbedUrl ?? null,
     });
     const saved = await this.courtRepo.save(court);
+    await this.upsertCourtWindow(saved, dto);
     return this.withLegacyPrice(saved);
   }
 
@@ -119,6 +179,7 @@ export class CourtsService {
         pricePerHourMember === null ? null : String(pricePerHourMember);
     }
     await this.courtRepo.save(row);
+    await this.upsertCourtWindow(row, dto);
     return this.findOne(id);
   }
 

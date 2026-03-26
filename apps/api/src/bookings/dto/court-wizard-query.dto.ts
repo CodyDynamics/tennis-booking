@@ -13,8 +13,8 @@ export class CourtWizardWindowsQueryDto {
   @IsUUID()
   locationId: string;
 
-  @ApiProperty({ enum: ["tennis", "pickleball"] })
-  @IsIn(["tennis", "pickleball"])
+  @ApiProperty({ enum: ["tennis", "pickleball", "ball-machine"] })
+  @IsIn(["tennis", "pickleball", "ball-machine"])
   sport: string;
 
   @ApiProperty({ enum: ["indoor", "outdoor"] })
@@ -32,6 +32,19 @@ export class CourtWizardAvailabilityQueryDto extends CourtWizardWindowsQueryDto 
   windowId: string;
 
   @ApiProperty({ example: 60 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(15)
+  durationMinutes: number;
+}
+
+/** New flow: no windowId — backend aggregates all windows automatically. */
+export class CourtSlotQueryDto extends CourtWizardWindowsQueryDto {
+  @ApiProperty({ example: "2026-03-26" })
+  @IsDateString()
+  bookingDate: string;
+
+  @ApiProperty({ example: 60, description: "Duration in minutes: 30 | 60 | 90" })
   @Type(() => Number)
   @IsInt()
   @Min(15)

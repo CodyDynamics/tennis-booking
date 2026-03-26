@@ -11,6 +11,30 @@ import { Server, Socket } from "socket.io";
 import { Logger } from "@nestjs/common";
 import { RedisService, HoldData } from "../redis/redis.service";
 
+// ─── Slot-level payloads (new flow) ──────────────────────────────────────────
+interface SlotHoldRequestPayload {
+  locationId: string;
+  sport: string;
+  courtType: string;
+  date: string;        // "yyyy-MM-dd"
+  startTime: string;   // "HH:mm"
+  endTime: string;     // "HH:mm"
+  durationMinutes: number;
+}
+
+interface SlotHoldReleasePayload {
+  locationId: string;
+  sport: string;
+  courtType: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+}
+
+interface SlotBookedPayload extends SlotHoldReleasePayload {
+  durationMinutes?: number;
+}
+
 interface HoldRequestPayload {
   courtId: string;
   date: string;          // "yyyy-MM-dd"
@@ -67,12 +91,21 @@ export class CourtHoldGateway implements OnGatewayConnection, OnGatewayDisconnec
   async handleDisconnect(client: Socket) {
     this.logger.debug(`WS disconnected: ${client.id}`);
     const meta = this.socketMeta.get(client.id);
-    const released = await this.redis.releaseAllHoldsForSocket(client.id);
+
+    // Release court-level holds
+    const releasedCourt = await this.redis.releaseAllHoldsForSocket(client.id);
+    // Release slot-level holds
+    const releasedSlot = await this.redis.removeAllSlotHoldsForSocket(client.id);
     this.socketMeta.delete(client.id);
 
-    if (released.length > 0 && meta) {
-      const snapshot = await this.buildSnapshot(meta.courtIds);
-      this.server.to(`location:${meta.locationId}`).emit("hold:update", { holds: snapshot });
+    if (meta && (releasedCourt.length > 0 || releasedSlot.length > 0)) {
+      if (releasedCourt.length > 0) {
+        const snapshot = await this.buildSnapshot(meta.courtIds);
+        this.server.to(`location:${meta.locationId}`).emit("hold:update", { holds: snapshot });
+      }
+      if (releasedSlot.length > 0) {
+        await this.broadcastSlotUpdate(meta.locationId);
+      }
     }
   }
 
@@ -89,6 +122,9 @@ export class CourtHoldGateway implements OnGatewayConnection, OnGatewayDisconnec
     // Send current snapshot to the joining client
     const snapshot = await this.buildSnapshot(courtIds);
     client.emit("hold:update", { holds: snapshot });
+    // Also send slot-hold counts immediately so "left" is correct on first paint.
+    const holdCounts = await this.redis.getSlotHoldCounts(locationId);
+    client.emit("slot:update", { holdCounts });
     this.logger.debug(`Socket ${client.id} joined location:${locationId}`);
   }
 
@@ -182,11 +218,59 @@ export class CourtHoldGateway implements OnGatewayConnection, OnGatewayDisconnec
     const raw = await this.redis.getHoldsByLocation("", courtIds);
     const snapshot: HoldSnapshot = {};
     for (const [compoundKey, data] of Object.entries(raw)) {
-      // compoundKey: {courtId}:{date}:{startTime}:{endTime}
       const parts = compoundKey.split(":");
       const [courtId, date, startTime, endTime] = parts;
       snapshot[compoundKey] = { ...data, courtId, date, startTime, endTime };
     }
     return snapshot;
+  }
+
+  // ─── New slot-level hold events ───────────────────────────────────────────
+
+  /** Client requests a slot hold (new flow: no specific court). */
+  @SubscribeMessage("slot:hold_request")
+  async handleSlotHoldRequest(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: SlotHoldRequestPayload,
+  ) {
+    const { locationId, sport, courtType, date, startTime, endTime } = payload;
+    const displayName =
+      (client.handshake.auth as { displayName?: string })?.displayName ??
+      (client.handshake.query?.displayName as string | undefined) ??
+      "A guest";
+
+    await this.redis.addSlotHolder(locationId, sport, courtType, date, startTime, endTime, client.id, displayName);
+    await this.broadcastSlotUpdate(locationId);
+    this.logger.debug(`Slot hold: ${sport}/${courtType} ${date} ${startTime}-${endTime} by ${client.id}`);
+  }
+
+  /** Client releases a slot hold (deselect or cancel). */
+  @SubscribeMessage("slot:hold_release")
+  async handleSlotHoldRelease(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: SlotHoldReleasePayload,
+  ) {
+    const { locationId, sport, courtType, date, startTime, endTime } = payload;
+    await this.redis.removeSlotHolder(locationId, sport, courtType, date, startTime, endTime, client.id);
+    await this.broadcastSlotUpdate(locationId);
+  }
+
+  /** Client emits after a successful slot booking so all room members refetch availability. */
+  @SubscribeMessage("slot:booked")
+  async handleSlotBooked(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: SlotBookedPayload,
+  ) {
+    const { locationId, sport, courtType, date, startTime, endTime } = payload;
+    await this.redis.forceDeleteSlotHold(locationId, sport, courtType, date, startTime, endTime);
+    await this.broadcastSlotUpdate(locationId);
+    this.server.to(`location:${locationId}`).emit("availability:changed", { date, startTime, endTime, sport, courtType });
+    this.logger.debug(`Slot booked broadcast: ${sport}/${courtType} ${date} ${startTime}-${endTime} → room location:${locationId}`);
+  }
+
+  /** Broadcast current slot hold counts to the entire location room. */
+  private async broadcastSlotUpdate(locationId: string) {
+    const holdCounts = await this.redis.getSlotHoldCounts(locationId);
+    this.server.to(`location:${locationId}`).emit("slot:update", { holdCounts });
   }
 }

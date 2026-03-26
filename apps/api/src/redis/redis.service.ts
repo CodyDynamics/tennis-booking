@@ -239,7 +239,6 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     // In-memory fallback
     for (const [key, entry] of this.memHolds) {
       if (entry.expiresAtMs <= now) continue;
-      // key: court_hold:{courtId}:{date}:{startTime}:{endTime}
       const withoutPrefix = key.replace("court_hold:", "");
       const courtId = withoutPrefix.split(":")[0];
       if (courtId && courtIds.includes(courtId)) {
@@ -247,6 +246,153 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       }
     }
     return result;
+  }
+
+  // ─── Slot-level holds (new flow) ─────────────────────────────────────────
+  //
+  // Key:   slot_hold|{locationId}|{sport}|{courtType}|{date}|{startTime}|{endTime}
+  // Value: JSON array of SlotHoldEntry (one entry per socket that holds this slot).
+  // Multiple holders are allowed (up to capacity, enforced by caller).
+  // Uses same Redis/in-memory dual-store pattern.
+
+  private slotHoldKey(locationId: string, sport: string, courtType: string, date: string, startTime: string, endTime: string) {
+    return `slot_hold|${locationId}|${sport}|${courtType}|${date}|${startTime}|${endTime}`;
+  }
+
+  /** Add a slot hold for a socket. Returns all current holders (for caller to check capacity). */
+  async addSlotHolder(
+    locationId: string, sport: string, courtType: string, date: string, startTime: string, endTime: string,
+    socketId: string, displayName: string, ttlSeconds = 300,
+  ): Promise<SlotHoldEntry[]> {
+    const key = this.slotHoldKey(locationId, sport, courtType, date, startTime, endTime);
+    const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
+    const entry: SlotHoldEntry = { socketId, displayName, lockedAt: new Date().toISOString(), expiresAt };
+    const nowMs = Date.now();
+
+    if (this.redisReady) {
+      try {
+        const raw = await this.client!.get(key);
+        const existing: SlotHoldEntry[] = raw ? (JSON.parse(raw) as SlotHoldEntry[]).filter(e => new Date(e.expiresAt).getTime() > nowMs) : [];
+        const without = existing.filter(e => e.socketId !== socketId);
+        const updated = [...without, entry];
+        await this.client!.set(key, JSON.stringify(updated), "EX", ttlSeconds);
+        return updated;
+      } catch { /* fall through */ }
+    }
+
+    // In-memory fallback
+    const memEntry = this.memHolds.get(key);
+    const existing: SlotHoldEntry[] = memEntry ? (JSON.parse(JSON.stringify((memEntry.data as unknown as SlotHoldEntry[]))) as SlotHoldEntry[]).filter(e => new Date(e.expiresAt).getTime() > nowMs) : [];
+    const without = existing.filter(e => e.socketId !== socketId);
+    const updated = [...without, entry];
+    this.memHolds.set(key, { data: updated as unknown as HoldData, expiresAtMs: nowMs + ttlSeconds * 1000 });
+    return updated;
+  }
+
+  /** Remove a slot hold for a socket. Returns remaining holders. */
+  async removeSlotHolder(
+    locationId: string, sport: string, courtType: string, date: string, startTime: string, endTime: string,
+    socketId: string,
+  ): Promise<SlotHoldEntry[]> {
+    const key = this.slotHoldKey(locationId, sport, courtType, date, startTime, endTime);
+    const nowMs = Date.now();
+
+    if (this.redisReady) {
+      try {
+        const raw = await this.client!.get(key);
+        if (!raw) return [];
+        const existing = (JSON.parse(raw) as SlotHoldEntry[]).filter(e => new Date(e.expiresAt).getTime() > nowMs);
+        const updated = existing.filter(e => e.socketId !== socketId);
+        if (updated.length === 0) { await this.client!.del(key); return []; }
+        await this.client!.set(key, JSON.stringify(updated), "KEEPTTL");
+        return updated;
+      } catch { /* fall through */ }
+    }
+
+    const memEntry = this.memHolds.get(key);
+    if (!memEntry) return [];
+    const existing = (memEntry.data as unknown as SlotHoldEntry[]).filter(e => new Date(e.expiresAt).getTime() > nowMs);
+    const updated = existing.filter(e => e.socketId !== socketId);
+    if (updated.length === 0) { this.memHolds.delete(key); return []; }
+    this.memHolds.set(key, { ...memEntry, data: updated as unknown as HoldData });
+    return updated;
+  }
+
+  /** Remove ALL slot holds for a socket (on disconnect). Returns affected keys. */
+  async removeAllSlotHoldsForSocket(socketId: string): Promise<string[]> {
+    const released: string[] = [];
+    const nowMs = Date.now();
+
+    if (this.redisReady) {
+      try {
+        const keys = await this.client!.keys("slot_hold|*");
+        for (const key of keys) {
+          const raw = await this.client!.get(key);
+          if (!raw) continue;
+          const existing = (JSON.parse(raw) as SlotHoldEntry[]).filter(e => new Date(e.expiresAt).getTime() > nowMs);
+          if (!existing.some(e => e.socketId === socketId)) continue;
+          const updated = existing.filter(e => e.socketId !== socketId);
+          if (updated.length === 0) { await this.client!.del(key); } else { await this.client!.set(key, JSON.stringify(updated), "KEEPTTL"); }
+          released.push(key);
+        }
+        return released;
+      } catch { /* fall through */ }
+    }
+
+    for (const [key, entry] of this.memHolds) {
+      if (!key.startsWith("slot_hold|")) continue;
+      const existing = (entry.data as unknown as SlotHoldEntry[]).filter(e => new Date(e.expiresAt).getTime() > nowMs && e.socketId !== socketId);
+      const hadSocket = (entry.data as unknown as SlotHoldEntry[]).some(e => e.socketId === socketId);
+      if (!hadSocket) continue;
+      if (existing.length === 0) { this.memHolds.delete(key); } else { this.memHolds.set(key, { ...entry, data: existing as unknown as HoldData }); }
+      released.push(key);
+    }
+    return released;
+  }
+
+  /**
+   * Get holdCounts for all slot holds in a location.
+   * Returns: Record<"sport|courtType|date|startTime|endTime", holdCount>
+   */
+  async getSlotHoldCounts(locationId: string): Promise<Record<string, number>> {
+    const result: Record<string, number> = {};
+    const nowMs = Date.now();
+    const prefix = `slot_hold|${locationId}|`;
+
+    if (this.redisReady) {
+      try {
+        const keys = await this.client!.keys(`${prefix}*`);
+        for (const key of keys) {
+          const raw = await this.client!.get(key);
+          if (!raw) continue;
+          const holders = (JSON.parse(raw) as SlotHoldEntry[]).filter(e => new Date(e.expiresAt).getTime() > nowMs);
+          if (holders.length === 0) continue;
+          const suffix = key.slice(prefix.length); // "sport|courtType|date|startTime|endTime"
+          result[suffix] = holders.length;
+        }
+        return result;
+      } catch { /* fall through */ }
+    }
+
+    for (const [key, entry] of this.memHolds) {
+      if (!key.startsWith(prefix)) continue;
+      const holders = (entry.data as unknown as SlotHoldEntry[]).filter(e => new Date(e.expiresAt).getTime() > nowMs);
+      if (holders.length === 0) continue;
+      const suffix = key.slice(prefix.length);
+      result[suffix] = holders.length;
+    }
+    return result;
+  }
+
+  /** Force-delete a slot hold (after booking confirmed). */
+  async forceDeleteSlotHold(
+    locationId: string, sport: string, courtType: string, date: string, startTime: string, endTime: string,
+  ): Promise<void> {
+    const key = this.slotHoldKey(locationId, sport, courtType, date, startTime, endTime);
+    this.memHolds.delete(key);
+    if (this.redisReady) {
+      try { await this.client!.del(key); } catch { /* swallow */ }
+    }
   }
 }
 
@@ -257,7 +403,7 @@ export interface HoldData {
   expiresAt: string;
 }
 
-export interface HoldData {
+export interface SlotHoldEntry {
   socketId: string;
   displayName: string;
   lockedAt: string;

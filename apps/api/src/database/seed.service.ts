@@ -18,6 +18,7 @@ import {
   MembershipStatus,
   MembershipTransactionType,
 } from "../memberships/entities/membership.enums";
+import { CourtBooking } from "../bookings/entities/court-booking.entity";
 import { getAllPermissionCodes } from "../roles/permissions.constants";
 
 const DEFAULT_ROLES = [
@@ -85,6 +86,8 @@ export class SeedService implements OnModuleInit {
     private membershipRepo: Repository<UserLocationMembership>,
     @InjectRepository(MembershipTransaction)
     private membershipTxRepo: Repository<MembershipTransaction>,
+    @InjectRepository(CourtBooking)
+    private courtBookingRepo: Repository<CourtBooking>,
   ) {}
 
   async onModuleInit() {
@@ -94,6 +97,9 @@ export class SeedService implements OnModuleInit {
       await this.seedSportsTable();
       await this.seedSportsData();
       await this.ensureLocationMapMetadata();
+      // Manual DB cleanup is handled externally when needed.
+      // Skip auto-delete in seed flow to avoid FK/TRUNCATE issues.
+      // await this.clearBookingsAndWindows();
       await this.seedLocationBookingWindows();
       await this.ensureExpandedCourtsAndPrices();
       await this.updateCourtsWithImages();
@@ -105,6 +111,21 @@ export class SeedService implements OnModuleInit {
       console.error("[SeedService] Seed failed:", err);
       throw err;
     }
+  }
+
+  /**
+   * Clear all court bookings and booking windows so we get a clean test state.
+   * Inserts simplified test windows after this runs.
+   * Only runs in non-production environments.
+   */
+  private async clearBookingsAndWindows() {
+    if (process.env.NODE_ENV === "production") return;
+    const deletedBookings = await this.courtBookingRepo.count();
+    await this.courtBookingRepo.clear();
+    console.log(`[SeedService] Cleared ${deletedBookings} court bookings.`);
+    const deletedWindows = await this.bookingWindowRepo.count();
+    await this.bookingWindowRepo.clear();
+    console.log(`[SeedService] Cleared ${deletedWindows} booking windows.`);
   }
 
   private async seedRoles() {
@@ -141,6 +162,12 @@ export class SeedService implements OnModuleInit {
         name: "Pickleball",
         description: "Pickleball courts",
         imageUrl: PICKLEBALL_IMAGES[0],
+      },
+      {
+        code: "ball-machine",
+        name: "Ball Machine",
+        description: "Ball machine training area (outdoor only)",
+        imageUrl: TENNIS_IMAGES[1],
       },
     ];
     for (const s of sportsData) {
@@ -187,7 +214,7 @@ export class SeedService implements OnModuleInit {
     // 3. Locations
     const locationsData = [
       {
-        name: "DEF Tennis Center",
+        name: "Springpark Tennis Center",
         address: "4714 Baldwin St, Dallas, TX 75210",
       },
       { name: "Downtown Pickleball Club", address: "100 Main St." },
@@ -205,49 +232,6 @@ export class SeedService implements OnModuleInit {
           }),
         );
         console.log(`[SeedService] Created location: ${location.name}`);
-
-        // 4. Courts
-        const courtsToCreate = [];
-        if (location.name.includes("Tennis")) {
-          for (let i = 1; i <= 4; i++) {
-            const idx = (i - 1) % TENNIS_IMAGES.length;
-            courtsToCreate.push({
-              locationId: location.id,
-              name: `Court ${i}`,
-              sport: "tennis",
-              type: "outdoor",
-              pricePerHourPublic: "20.00",
-              pricePerHourMember: null,
-              description:
-                "Premium hard court with professional surface. Ideal for training and matches.",
-              imageUrl: TENNIS_IMAGES[idx],
-              imageGallery: TENNIS_GALLERIES[idx],
-              mapEmbedUrl: MAP_EMBED,
-            });
-          }
-        } else {
-          for (let i = 1; i <= 4; i++) {
-            const idx = (i - 1) % PICKLEBALL_IMAGES.length;
-            courtsToCreate.push({
-              locationId: location.id,
-              name: `Pickleball Court ${i}`,
-              sport: "pickleball",
-              type: "indoor",
-              pricePerHourPublic: "15.00",
-              pricePerHourMember: "12.00",
-              description:
-                "Indoor pro court with climate control. Perfect for year-round play.",
-              imageUrl: PICKLEBALL_IMAGES[idx],
-              imageGallery: PICKLEBALL_GALLERIES[idx],
-              mapEmbedUrl: MAP_EMBED,
-            });
-          }
-        }
-
-        for (const c of courtsToCreate) {
-          await this.courtRepo.save(this.courtRepo.create(c));
-          console.log(`[SeedService] Created court: ${c.name} (${c.sport})`);
-        }
       }
     }
   }
@@ -560,7 +544,7 @@ export class SeedService implements OnModuleInit {
       markers: { lat: number; lng: number; label: string }[];
     }> = [
       {
-        name: "DEF Tennis Center",
+        name: "Springpark Tennis Center",
         address: "4714 Baldwin St, Dallas, TX 75210",
         latitude: "32.7492000",
         longitude: "-96.7550000",
@@ -648,189 +632,61 @@ export class SeedService implements OnModuleInit {
   /**
    * Time windows for the booking wizard (sport + indoor/outdoor), aligned with DATABASE_ERD.
    */
+  /**
+   * Seed a single test booking window for public tennis courts: 08:00–11:00.
+   */
   private async seedLocationBookingWindows() {
-    const windows: Array<{
-      locationName: string;
-      sport: string;
-      courtType: string;
-      windowStartTime: string;
-      windowEndTime: string;
-      allowedDurationMinutes: string;
-      slotGridMinutes: number;
-      sortOrder: number;
-    }> = [
-      {
-        locationName: "DEF Tennis Center",
-        sport: "tennis",
-        courtType: "outdoor",
-        windowStartTime: "08:00:00",
-        windowEndTime: "10:30:00",
-        allowedDurationMinutes: "[30,60,90]",
-        slotGridMinutes: 30,
-        sortOrder: 0,
+    const loc = await this.locationRepo.findOne({
+      where: {
+        name: "Springpark Tennis Center",
+        visibility: LocationVisibility.PUBLIC,
       },
-      {
-        locationName: "DEF Tennis Center",
-        sport: "tennis",
-        courtType: "outdoor",
-        windowStartTime: "14:00:00",
-        windowEndTime: "15:30:00",
-        allowedDurationMinutes: "[30,60,90]",
-        slotGridMinutes: 30,
-        sortOrder: 1,
-      },
-      {
-        locationName: "DEF Tennis Center",
-        sport: "tennis",
-        courtType: "outdoor",
-        windowStartTime: "19:00:00",
-        windowEndTime: "20:30:00",
-        allowedDurationMinutes: "[30,60,90]",
-        slotGridMinutes: 30,
-        sortOrder: 2,
-      },
-      {
-        locationName: "Downtown Pickleball Club",
-        sport: "pickleball",
-        courtType: "indoor",
-        windowStartTime: "08:00:00",
-        windowEndTime: "10:30:00",
-        allowedDurationMinutes: "[30,60,90]",
-        slotGridMinutes: 30,
-        sortOrder: 0,
-      },
-      {
-        locationName: "Downtown Pickleball Club",
-        sport: "pickleball",
-        courtType: "indoor",
-        windowStartTime: "14:00:00",
-        windowEndTime: "15:30:00",
-        allowedDurationMinutes: "[30,60,90]",
-        slotGridMinutes: 30,
-        sortOrder: 1,
-      },
-      {
-        locationName: "Downtown Pickleball Club",
-        sport: "pickleball",
-        courtType: "indoor",
-        windowStartTime: "19:00:00",
-        windowEndTime: "20:30:00",
-        allowedDurationMinutes: "[30,60,90]",
-        slotGridMinutes: 30,
-        sortOrder: 2,
-      },
-      // DEF — indoor tennis (extra courts)
-      {
-        locationName: "DEF Tennis Center",
-        sport: "tennis",
-        courtType: "indoor",
-        windowStartTime: "08:00:00",
-        windowEndTime: "10:30:00",
-        allowedDurationMinutes: "[30,60,90]",
-        slotGridMinutes: 30,
-        sortOrder: 0,
-      },
-      {
-        locationName: "DEF Tennis Center",
-        sport: "tennis",
-        courtType: "indoor",
-        windowStartTime: "14:00:00",
-        windowEndTime: "15:30:00",
-        allowedDurationMinutes: "[30,60,90]",
-        slotGridMinutes: 30,
-        sortOrder: 1,
-      },
-      {
-        locationName: "DEF Tennis Center",
-        sport: "tennis",
-        courtType: "indoor",
-        windowStartTime: "19:00:00",
-        windowEndTime: "20:30:00",
-        allowedDurationMinutes: "[30,60,90]",
-        slotGridMinutes: 30,
-        sortOrder: 2,
-      },
-      // Downtown Pickleball — outdoor pickleball
-      {
-        locationName: "Downtown Pickleball Club",
-        sport: "pickleball",
-        courtType: "outdoor",
-        windowStartTime: "08:00:00",
-        windowEndTime: "10:30:00",
-        allowedDurationMinutes: "[30,60,90]",
-        slotGridMinutes: 30,
-        sortOrder: 0,
-      },
-      {
-        locationName: "Downtown Pickleball Club",
-        sport: "pickleball",
-        courtType: "outdoor",
-        windowStartTime: "14:00:00",
-        windowEndTime: "15:30:00",
-        allowedDurationMinutes: "[30,60,90]",
-        slotGridMinutes: 30,
-        sortOrder: 1,
-      },
-      {
-        locationName: "Downtown Pickleball Club",
-        sport: "pickleball",
-        courtType: "outdoor",
-        windowStartTime: "19:00:00",
-        windowEndTime: "20:30:00",
-        allowedDurationMinutes: "[30,60,90]",
-        slotGridMinutes: 30,
-        sortOrder: 2,
-      },
-    ];
-
-    for (const w of windows) {
-      const loc = await this.locationRepo.findOne({
-        where: { name: w.locationName },
-      });
-      if (!loc) continue;
-      const existing = await this.bookingWindowRepo.findOne({
-        where: {
-          locationId: loc.id,
-          sport: w.sport,
-          courtType: w.courtType,
-          windowStartTime: w.windowStartTime,
-          windowEndTime: w.windowEndTime,
-        },
-      });
-      if (existing) continue;
-      await this.bookingWindowRepo.save(
-        this.bookingWindowRepo.create({
-          locationId: loc.id,
-          sport: w.sport,
-          courtType: w.courtType,
-          windowStartTime: w.windowStartTime,
-          windowEndTime: w.windowEndTime,
-          allowedDurationMinutes: w.allowedDurationMinutes,
-          slotGridMinutes: w.slotGridMinutes,
-          sortOrder: w.sortOrder,
-          isActive: true,
-        }),
-      );
+    });
+    if (!loc) {
       console.log(
-        `[SeedService] Booking window ${w.windowStartTime}-${w.windowEndTime} (${w.sport}/${w.courtType}) @ ${w.locationName}`,
+        "[SeedService] seedLocationBookingWindows: public tennis location not found, skipping.",
       );
+      return;
     }
+
+    // Keep only one canonical window for this location/sport/type.
+    await this.bookingWindowRepo.delete({
+      locationId: loc.id,
+      sport: "tennis",
+      courtType: "outdoor",
+    });
+
+    await this.bookingWindowRepo.save(
+      this.bookingWindowRepo.create({
+        locationId: loc.id,
+        sport: "tennis",
+        courtType: "outdoor",
+        windowStartTime: "08:00:00",
+        windowEndTime: "11:00:00",
+        allowedDurationMinutes: "[30,60,90]",
+        slotGridMinutes: 30,
+        sortOrder: 0,
+        isActive: true,
+      }),
+    );
+    console.log(
+      "[SeedService] Booking window reset: 08:00-11:00 (tennis/outdoor @ Springpark Tennis Center)",
+    );
   }
 
   /**
-   * Extra courts + varied public hourly rates (idempotent by location + court name).
-   * Runs on every seed so existing DBs gain new rows without wiping data.
+   * Add only 3 public tennis courts for easier booking-flow testing.
    */
   private async ensureExpandedCourtsAndPrices() {
     const def = await this.locationRepo.findOne({
-      where: { name: "DEF Tennis Center" },
+      where: {
+        name: "Springpark Tennis Center",
+        visibility: LocationVisibility.PUBLIC,
+      },
     });
-    const dpc = await this.locationRepo.findOne({
-      where: { name: "Downtown Pickleball Club" },
-    });
-    if (!def || !dpc) {
+    if (!def) {
       console.log(
-        "[SeedService] ensureExpandedCourtsAndPrices skip: locations missing.",
+        "[SeedService] ensureExpandedCourtsAndPrices skip: public tennis location missing.",
       );
       return;
     }
@@ -857,14 +713,6 @@ export class SeedService implements OnModuleInit {
         imageGallery: TENNIS_GALLERIES[idx],
       };
     };
-    const pickPbMedia = (name: string) => {
-      const idx = hashPick(name, PICKLEBALL_IMAGES.length);
-      return {
-        imageUrl: PICKLEBALL_IMAGES[idx],
-        imageGallery: PICKLEBALL_GALLERIES[idx],
-      };
-    };
-
     const defCourts: CourtSeed[] = [
       {
         name: "Court 1",
@@ -890,168 +738,10 @@ export class SeedService implements OnModuleInit {
         pricePerHourMember: null,
         description: "Outdoor premium surface.",
       },
-      {
-        name: "Court 4",
-        sport: "tennis",
-        type: "outdoor",
-        pricePerHourPublic: "40.00",
-        pricePerHourMember: null,
-        description: "Outdoor show court (floodlights).",
-      },
-      {
-        name: "Court 5",
-        sport: "tennis",
-        type: "outdoor",
-        pricePerHourPublic: "32.00",
-        pricePerHourMember: null,
-        description: "Outdoor — doubles friendly.",
-      },
-      {
-        name: "Championship Court",
-        sport: "tennis",
-        type: "outdoor",
-        pricePerHourPublic: "55.00",
-        pricePerHourMember: null,
-        description: "Center court with seating (premium).",
-      },
-      {
-        name: "Tennis Dome A",
-        sport: "tennis",
-        type: "indoor",
-        pricePerHourPublic: "38.00",
-        pricePerHourMember: null,
-        description: "Climate-controlled indoor tennis.",
-      },
-      {
-        name: "Tennis Dome B",
-        sport: "tennis",
-        type: "indoor",
-        pricePerHourPublic: "42.00",
-        pricePerHourMember: null,
-        description: "Indoor hard — high ceiling.",
-      },
-      {
-        name: "Tennis Dome C",
-        sport: "tennis",
-        type: "indoor",
-        pricePerHourPublic: "48.00",
-        pricePerHourMember: null,
-        description: "Indoor — video-friendly layout.",
-      },
-      {
-        name: "Tennis Dome D",
-        sport: "tennis",
-        type: "indoor",
-        pricePerHourPublic: "52.00",
-        pricePerHourMember: null,
-        description: "Indoor premium cushioned surface.",
-      },
-    ];
-
-    const dpcCourts: CourtSeed[] = [
-      {
-        name: "Pickleball Court 1",
-        sport: "pickleball",
-        type: "indoor",
-        pricePerHourPublic: "14.00",
-        pricePerHourMember: "11.00",
-        description: "Indoor pro court — climate controlled.",
-      },
-      {
-        name: "Pickleball Court 2",
-        sport: "pickleball",
-        type: "indoor",
-        pricePerHourPublic: "16.00",
-        pricePerHourMember: "12.50",
-        description: "Indoor tournament-grade surface.",
-      },
-      {
-        name: "Pickleball Court 3",
-        sport: "pickleball",
-        type: "indoor",
-        pricePerHourPublic: "18.00",
-        pricePerHourMember: "14.00",
-        description: "Indoor — reserved for ladder play.",
-      },
-      {
-        name: "Pickleball Court 4",
-        sport: "pickleball",
-        type: "indoor",
-        pricePerHourPublic: "15.00",
-        pricePerHourMember: "12.00",
-        description: "Indoor practice wall nearby.",
-      },
-      {
-        name: "Pickleball Court 5",
-        sport: "pickleball",
-        type: "indoor",
-        pricePerHourPublic: "17.00",
-        pricePerHourMember: "13.00",
-        description: "Indoor mid-court viewing.",
-      },
-      {
-        name: "Pickleball Court 6",
-        sport: "pickleball",
-        type: "indoor",
-        pricePerHourPublic: "19.00",
-        pricePerHourMember: "14.50",
-        description: "Indoor premium lighting.",
-      },
-      {
-        name: "Pickleball Court 7",
-        sport: "pickleball",
-        type: "indoor",
-        pricePerHourPublic: "13.00",
-        pricePerHourMember: "10.00",
-        description: "Indoor starter-friendly.",
-      },
-      {
-        name: "Pickleball Court 8",
-        sport: "pickleball",
-        type: "indoor",
-        pricePerHourPublic: "20.00",
-        pricePerHourMember: "15.00",
-        description: "Indoor flagship court.",
-      },
-      {
-        name: "Riverside Pickle 1",
-        sport: "pickleball",
-        type: "outdoor",
-        pricePerHourPublic: "10.00",
-        pricePerHourMember: "8.50",
-        description: "Outdoor — breezy riverside strip.",
-      },
-      {
-        name: "Riverside Pickle 2",
-        sport: "pickleball",
-        type: "outdoor",
-        pricePerHourPublic: "11.00",
-        pricePerHourMember: "9.00",
-        description: "Outdoor — portable net zone.",
-      },
-      {
-        name: "Riverside Pickle 3",
-        sport: "pickleball",
-        type: "outdoor",
-        pricePerHourPublic: "12.50",
-        pricePerHourMember: "9.75",
-        description: "Outdoor — shaded side.",
-      },
-      {
-        name: "Riverside Pickle 4",
-        sport: "pickleball",
-        type: "outdoor",
-        pricePerHourPublic: "9.00",
-        pricePerHourMember: "7.50",
-        description: "Outdoor — quick games.",
-      },
     ];
 
     const upsert = async (locationId: string, row: CourtSeed) => {
-      const media =
-        row.sport === "tennis"
-          ? pickTennisMedia(row.name)
-          : pickPbMedia(row.name);
+      const media = pickTennisMedia(row.name);
       const court = await this.courtRepo.findOne({
         where: { locationId, name: row.name },
       });
@@ -1086,12 +776,40 @@ export class SeedService implements OnModuleInit {
     for (const row of defCourts) {
       await upsert(def.id, row);
     }
-    for (const row of dpcCourts) {
-      await upsert(dpc.id, row);
+
+    // Cleanup: keep exactly Court 1/2/3 at this location.
+    const keepNames = new Set(defCourts.map((c) => c.name));
+    const allAtLocation = await this.courtRepo.find({
+      where: { locationId: def.id },
+      order: { createdAt: "ASC" },
+    });
+
+    const seen = new Set<string>();
+    for (const c of allAtLocation) {
+      const isWanted = keepNames.has(c.name);
+      const isDuplicateWanted = isWanted && seen.has(c.name);
+      if (!isWanted || isDuplicateWanted) {
+        const bookingCount = await this.courtBookingRepo.count({
+          where: { courtId: c.id },
+        });
+        if (bookingCount === 0) {
+          await this.courtRepo.delete(c.id);
+          console.log(
+            `[SeedService] Removed extra/duplicate court: ${c.name} (${c.id})`,
+          );
+        } else {
+          await this.courtRepo.update(c.id, { status: "maintenance" });
+          console.log(
+            `[SeedService] Marked extra/duplicate court as maintenance (has bookings): ${c.name} (${c.id})`,
+          );
+        }
+      } else {
+        seen.add(c.name);
+      }
     }
 
     console.log(
-      `[SeedService] Courts catalog: DEF ${defCourts.length} rows, DPC ${dpcCourts.length} rows (upserted).`,
+      `[SeedService] Courts catalog: DEF ${defCourts.length} public tennis courts (upserted).`,
     );
   }
 

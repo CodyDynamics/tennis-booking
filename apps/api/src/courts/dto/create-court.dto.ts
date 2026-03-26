@@ -1,5 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsString, IsOptional, IsNumber, IsIn, Min } from "class-validator";
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsIn,
+  Min,
+  Matches,
+} from "class-validator";
 
 export class CreateCourtDto {
   @ApiProperty({ description: "Location UUID" })
@@ -15,9 +22,12 @@ export class CreateCourtDto {
   @IsIn(["indoor", "outdoor"])
   type?: string;
 
-  @ApiPropertyOptional({ enum: ["tennis", "pickleball"], default: "tennis" })
+  @ApiPropertyOptional({
+    enum: ["tennis", "pickleball", "ball-machine"],
+    default: "tennis",
+  })
   @IsOptional()
-  @IsIn(["tennis", "pickleball"])
+  @IsIn(["tennis", "pickleball", "ball-machine"])
   sport?: string;
 
   @ApiPropertyOptional({
@@ -75,4 +85,28 @@ export class CreateCourtDto {
   @IsOptional()
   @IsIn(["active", "maintenance"])
   status?: string;
+
+  @ApiPropertyOptional({
+    example: "08:00",
+    description:
+      "Optional per-court booking window start time (HH:mm). If set, end time is required.",
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, {
+    message: "windowStartTime must be HH:mm",
+  })
+  windowStartTime?: string;
+
+  @ApiPropertyOptional({
+    example: "11:00",
+    description:
+      "Optional per-court booking window end time (HH:mm). If set, start time is required.",
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, {
+    message: "windowEndTime must be HH:mm",
+  })
+  windowEndTime?: string;
 }

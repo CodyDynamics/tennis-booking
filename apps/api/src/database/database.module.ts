@@ -11,6 +11,7 @@ import { Coach } from "../coaches/entities/coach.entity";
 import { LocationBookingWindow } from "../locations/entities/location-booking-window.entity";
 import { UserLocationMembership } from "../memberships/entities/user-location-membership.entity";
 import { MembershipTransaction } from "../memberships/entities/membership-transaction.entity";
+import { CourtBooking } from "../bookings/entities/court-booking.entity";
 import { SeedService } from "./seed.service";
 
 @Module({
@@ -27,6 +28,7 @@ import { SeedService } from "./seed.service";
       LocationBookingWindow,
       UserLocationMembership,
       MembershipTransaction,
+      CourtBooking,
     ]),
   ],
   providers: [SeedService],

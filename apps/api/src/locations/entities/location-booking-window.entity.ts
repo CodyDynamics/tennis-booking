@@ -8,6 +8,7 @@ import {
   JoinColumn,
 } from "typeorm";
 import { Location } from "./location.entity";
+import { Court } from "../../courts/entities/court.entity";
 
 @Entity("location_booking_windows")
 export class LocationBookingWindow {
@@ -16,6 +17,10 @@ export class LocationBookingWindow {
 
   @Column()
   locationId: string;
+
+  /** Optional per-court override. Null means location-level window for sport+courtType. */
+  @Column({ type: "uuid", nullable: true })
+  courtId: string | null;
 
   @Column({ type: "varchar" })
   sport: string; // tennis | pickleball
@@ -51,4 +56,8 @@ export class LocationBookingWindow {
   @ManyToOne(() => Location, { onDelete: "CASCADE" })
   @JoinColumn({ name: "locationId" })
   location: Location;
+
+  @ManyToOne(() => Court, { onDelete: "CASCADE", nullable: true })
+  @JoinColumn({ name: "courtId" })
+  court: Court | null;
 }

@@ -1,14 +1,19 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, ConflictException, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
 import { CourtBookingHandler } from "./handlers/court-booking.handler";
 import { CoachSessionHandler } from "./handlers/coach-session.handler";
 import { CourtWizardAvailabilityService } from "./court-wizard-availability.service";
 import { CreateCourtBookingDto } from "./dto/create-court-booking.dto";
 import { CreateCoachSessionDto } from "./dto/create-coach-session.dto";
+import { CreateCourtSlotBookingDto } from "./dto/create-court-slot-booking.dto";
 import {
   CourtWizardAvailabilityQueryDto,
   CourtWizardWindowsQueryDto,
+  CourtSlotQueryDto,
 } from "./dto/court-wizard-query.dto";
 import { BookingKind } from "./interfaces/booking-handler.interface";
+import { Court } from "../courts/entities/court.entity";
 
 /**
  * Booking Service (Parent / Facade).
@@ -22,6 +27,8 @@ export class BookingsService {
     private readonly courtBookingHandler: CourtBookingHandler,
     private readonly coachSessionHandler: CoachSessionHandler,
     private readonly courtWizardAvailability: CourtWizardAvailabilityService,
+    @InjectRepository(Court)
+    private readonly courtRepo: Repository<Court>,
   ) {}
 
   // ----- Court booking (sân, optional coach) -----
@@ -81,6 +88,74 @@ export class BookingsService {
       bookingDate: q.bookingDate,
       windowId: q.windowId,
       durationMinutes: q.durationMinutes,
+    });
+  }
+
+  /** New flow: aggregate all windows, return slots with availableCount (no court names). */
+  getAvailableSlots(userId: string, q: CourtSlotQueryDto) {
+    return this.courtWizardAvailability.computeAvailableSlots({
+      userId,
+      locationId: q.locationId,
+      sport: q.sport,
+      courtType: q.courtType,
+      bookingDate: q.bookingDate,
+      durationMinutes: q.durationMinutes,
+    });
+  }
+
+  /**
+   * New booking flow: user picks a slot, system randomly assigns a free court.
+   * Returns booking result + the assigned courtId (for internal reference).
+   */
+  async createSlotBooking(
+    userId: string,
+    dto: CreateCourtSlotBookingDto,
+    organizationId?: string | null,
+    branchId?: string | null,
+  ) {
+    // Find all active courts for location+sport+courtType
+    const courts = await this.courtRepo.find({
+      where: { locationId: dto.locationId, sport: dto.sport, type: dto.courtType, status: "active" },
+      order: { name: "ASC" },
+    });
+
+    if (courts.length === 0) {
+      throw new ConflictException("No courts available for this location, sport, and court type.");
+    }
+
+    // Shuffle courts (random order) to avoid always picking the same one
+    const shuffled = courts.sort(() => Math.random() - 0.5);
+
+    // Find the first available court for this slot
+    let assignedCourtId: string | null = null;
+    for (const court of shuffled) {
+      const free = await this.courtBookingHandler.isCourtAvailable(
+        court.id,
+        dto.bookingDate,
+        dto.startTime,
+        dto.endTime,
+      );
+      if (free) {
+        assignedCourtId = court.id;
+        break;
+      }
+    }
+
+    if (!assignedCourtId) {
+      throw new ConflictException("All courts are taken for this slot. Please pick another time.");
+    }
+
+    const duration = dto.durationMinutes ?? this.getDurationMinutes(dto.startTime, dto.endTime);
+    return this.courtBookingHandler.create({
+      userId,
+      organizationId: organizationId ?? null,
+      branchId: branchId ?? null,
+      courtId: assignedCourtId,
+      bookingDate: dto.bookingDate,
+      startTime: dto.startTime,
+      endTime: dto.endTime,
+      coachId: dto.coachId,
+      durationMinutes: duration,
     });
   }
 
