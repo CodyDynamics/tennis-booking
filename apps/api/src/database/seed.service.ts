@@ -155,14 +155,14 @@ export class SeedService implements OnModuleInit {
   }
 
   private async seedSportsData() {
-    // 1. Organization (support both CodyReserve and legacy VigorSports)
+    // 1. Organization (support both CodyPlay and legacy VigorSports)
     let org = await this.orgRepo.findOne({
-      where: { name: In(["CodyReserve", "VigorSports"]) },
+      where: { name: In(["CodyPlay", "VigorSports"]) },
     });
     if (!org) {
       org = await this.orgRepo.save(
         this.orgRepo.create({
-          name: "CodyReserve",
+          name: "CodyPlay",
           description: "Premium sports facilities management",
         }),
       );
@@ -289,7 +289,7 @@ export class SeedService implements OnModuleInit {
   /** Seed coach users and coach records for the branch (shown in "Our Coaches" at each location) */
   private async seedCoaches() {
     const org = await this.orgRepo.findOne({
-      where: { name: In(["CodyReserve", "VigorSports"]) },
+      where: { name: In(["CodyPlay", "VigorSports"]) },
     });
     const branch = await this.branchRepo.findOne({
       where: { name: "Texas Region" },
@@ -297,7 +297,7 @@ export class SeedService implements OnModuleInit {
     const coachRole = await this.roleRepo.findOne({ where: { name: "coach" } });
     if (!org || !branch || !coachRole) {
       console.log(
-        "[SeedService] Coaches skip: need CodyReserve org, Texas Region branch, and coach role.",
+        "[SeedService] Coaches skip: need CodyPlay org, Texas Region branch, and coach role.",
       );
       return;
     }
@@ -305,7 +305,7 @@ export class SeedService implements OnModuleInit {
     /* eslint-disable prettier/prettier */
     const coachUsers = [
       {
-        email: "coach1@codyreserve.com",
+        email: "coach1@CodyPlay.com",
         fullName: "Alex Rivera",
         bio: "Certified tennis and pickleball coach. 10+ years experience.",
         hourlyRate: "45.00",
@@ -313,7 +313,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach2@codyreserve.com",
+        email: "coach2@CodyPlay.com",
         fullName: "Jordan Lee",
         bio: "Former collegiate player. Specializing in technique and match strategy.",
         hourlyRate: "50.00",
@@ -321,7 +321,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach3@codyreserve.com",
+        email: "coach3@CodyPlay.com",
         fullName: "Morgan Taylor",
         bio: "USPTA certified. Focus on doubles and singles strategy.",
         hourlyRate: "48.00",
@@ -329,7 +329,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach4@codyreserve.com",
+        email: "coach4@CodyPlay.com",
         fullName: "Casey Kim",
         bio: "Pickleball specialist. Tournament experience and beginner programs.",
         hourlyRate: "42.00",
@@ -337,7 +337,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach5@codyreserve.com",
+        email: "coach5@CodyPlay.com",
         fullName: "Riley Chen",
         bio: "Tennis and pickleball. Junior development and adult clinics.",
         hourlyRate: "46.00",
@@ -345,7 +345,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach6@codyreserve.com",
+        email: "coach6@CodyPlay.com",
         fullName: "Sam Davis",
         bio: "Former ATP circuit. Serve and volley specialist.",
         hourlyRate: "55.00",
@@ -353,7 +353,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach7@codyreserve.com",
+        email: "coach7@CodyPlay.com",
         fullName: "Jamie Wright",
         bio: "Fitness and tennis combined. Movement and conditioning.",
         hourlyRate: "44.00",
@@ -361,7 +361,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach8@codyreserve.com",
+        email: "coach8@CodyPlay.com",
         fullName: "Drew Martinez",
         bio: "High-performance tennis. Mental game and match play.",
         hourlyRate: "52.00",
@@ -369,7 +369,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach9@codyreserve.com",
+        email: "coach9@CodyPlay.com",
         fullName: "Quinn Anderson",
         bio: "Pickleball and paddle sports. Group lessons and leagues.",
         hourlyRate: "40.00",
@@ -377,7 +377,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach10@codyreserve.com",
+        email: "coach10@CodyPlay.com",
         fullName: "Skyler Brown",
         bio: "Tennis fundamentals and footwork. All levels welcome.",
         hourlyRate: "43.00",
@@ -385,7 +385,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach11@codyreserve.com",
+        email: "coach11@CodyPlay.com",
         fullName: "Jordan Smith",
         bio: "Doubles strategy and net play. Tournament preparation.",
         hourlyRate: "49.00",
@@ -393,7 +393,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1519345182560-3f2917c472ef?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach12@codyreserve.com",
+        email: "coach12@CodyPlay.com",
         fullName: "Taylor Green",
         bio: "Junior tennis and pickleball. Fun, progressive curriculum.",
         hourlyRate: "41.00",
@@ -401,7 +401,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach13@codyreserve.com",
+        email: "coach13@CodyPlay.com",
         fullName: "Reese White",
         bio: "Recovery and technique. Injury prevention for players.",
         hourlyRate: "47.00",
@@ -409,7 +409,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach14@codyreserve.com",
+        email: "coach14@CodyPlay.com",
         fullName: "Cameron Hall",
         bio: "Serve technique and power. Video analysis available.",
         hourlyRate: "51.00",
@@ -417,7 +417,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1502685104226-ee32379fefbe?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach15@codyreserve.com",
+        email: "coach15@CodyPlay.com",
         fullName: "Avery Clark",
         bio: "Mixed doubles and social play. Leagues and round robins.",
         hourlyRate: "39.00",
@@ -425,7 +425,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach16@codyreserve.com",
+        email: "coach16@CodyPlay.com",
         fullName: "Parker Lewis",
         bio: "Tennis and pickleball. High school and college prep.",
         hourlyRate: "53.00",
@@ -433,7 +433,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1507591064344-4c6ce005b128?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach17@codyreserve.com",
+        email: "coach17@CodyPlay.com",
         fullName: "Blake Young",
         bio: "Beginner to advanced. Patience and clear communication.",
         hourlyRate: "38.00",
@@ -441,7 +441,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach18@codyreserve.com",
+        email: "coach18@CodyPlay.com",
         fullName: "Morgan King",
         bio: "Competitive pickleball. Dinking and third-shot drops.",
         hourlyRate: "44.00",
@@ -449,7 +449,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1539571696357-5a69c3a0062f?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach19@codyreserve.com",
+        email: "coach19@CodyPlay.com",
         fullName: "Riley Scott",
         bio: "Tennis tactics and match analysis. Film review sessions.",
         hourlyRate: "54.00",
@@ -457,7 +457,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1528892952291-009c663ce843?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach20@codyreserve.com",
+        email: "coach20@CodyPlay.com",
         fullName: "Casey Adams",
         bio: "All-around coach. Tennis, pickleball, and fitness.",
         hourlyRate: "46.00",
@@ -471,7 +471,7 @@ export class SeedService implements OnModuleInit {
     const freeCoachUsers = Array.from({ length: 20 }, (_, i) => {
       const n = 21 + i;
       return {
-        email: `coach${n}@codyreserve.com`,
+        email: `coach${n}@CodyPlay.com`,
         fullName: `Independent Pro ${n}`,
         bio: "Independent coach (seed). Listed on the public coach directory; not tied to a single court.",
         hourlyRate: `${40 + (i % 12)}.00`,
@@ -1100,7 +1100,7 @@ export class SeedService implements OnModuleInit {
    */
   private async seedPrivateClubDemoMember() {
     const org = await this.orgRepo.findOne({
-      where: { name: In(["CodyReserve", "VigorSports"]) },
+      where: { name: In(["CodyPlay", "VigorSports"]) },
     });
     const branch = await this.branchRepo.findOne({
       where: { name: "Texas Region" },
@@ -1121,12 +1121,12 @@ export class SeedService implements OnModuleInit {
       phone: string;
     }> = [
       {
-        email: "private-club-demo@codyreserve.com",
+        email: "private-club-demo@CodyPlay.com",
         fullName: "Private Club Demo Member",
         phone: "+15555550999",
       },
       {
-        email: "pickleball-member2@codyreserve.com",
+        email: "pickleball-member2@CodyPlay.com",
         fullName: "Downtown Pickleball Member Two",
         phone: "+15555550888",
       },
@@ -1203,7 +1203,7 @@ export class SeedService implements OnModuleInit {
     if (!coachRole) return;
 
     const org = await this.orgRepo.findOne({
-      where: { name: In(["CodyReserve", "VigorSports"]) },
+      where: { name: In(["CodyPlay", "VigorSports"]) },
     });
     const branch = await this.branchRepo.findOne({
       where: { name: "Texas Region" },
@@ -1223,11 +1223,11 @@ export class SeedService implements OnModuleInit {
 
     const legacyEmails = Array.from(
       { length: 20 },
-      (_, i) => `coach${i + 1}@codyreserve.com`,
+      (_, i) => `coach${i + 1}@CodyPlay.com`,
     );
     const freeEmails = Array.from(
       { length: 20 },
-      (_, i) => `coach${i + 21}@codyreserve.com`,
+      (_, i) => `coach${i + 21}@CodyPlay.com`,
     );
 
     for (let i = 0; i < legacyEmails.length; i++) {
@@ -1281,7 +1281,7 @@ export class SeedService implements OnModuleInit {
         });
         if (assigned >= target) break;
 
-        const email = `autofill-${court.id}-slot${nextSlot}@codyreserve.com`;
+        const email = `autofill-${court.id}-slot${nextSlot}@CodyPlay.com`;
         nextSlot += 1;
 
         let user = await this.userRepo.findOne({
