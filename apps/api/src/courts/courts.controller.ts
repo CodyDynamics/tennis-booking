@@ -48,6 +48,7 @@ export class CourtsController {
   @ApiQuery({ name: "status", required: false, enum: ["active", "maintenance"] })
   @ApiQuery({ name: "search", required: false, description: "Search by court name" })
   @ApiQuery({ name: "sport", required: false, enum: ["tennis", "pickleball"] })
+  @ApiQuery({ name: "sportId", required: false })
   @ApiQuery({ name: "page", required: false, description: "Page index (0-based)" })
   @ApiQuery({ name: "pageSize", required: false, description: "Page size (max 1000, default 500)" })
   @ApiResponse({ status: 200, description: "Paginated list: total, data, paginationInfo" })
@@ -57,6 +58,7 @@ export class CourtsController {
     @Query("status") status?: string,
     @Query("search") search?: string,
     @Query("sport") sport?: string,
+    @Query("sportId") sportId?: string,
     @Query("page") page?: string,
     @Query("pageSize") pageSize?: string,
   ) {
@@ -71,6 +73,7 @@ export class CourtsController {
       status,
       search,
       sport,
+      sportId,
       pageIndex,
       size,
     );

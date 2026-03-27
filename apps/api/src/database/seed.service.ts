@@ -6,12 +6,14 @@ import { Role } from "../roles/entities/role.entity";
 import { Organization } from "../organizations/entities/organization.entity";
 import { Branch } from "../branches/entities/branch.entity";
 import { Location } from "../locations/entities/location.entity";
+import { LocationKind } from "../locations/entities/location-kind.enum";
 import { Court } from "../courts/entities/court.entity";
 import { Sport } from "../sports/entities/sport.entity";
 import { User } from "../users/entities/user.entity";
 import { Coach } from "../coaches/entities/coach.entity";
 import { LocationBookingWindow } from "../locations/entities/location-booking-window.entity";
 import { LocationVisibility } from "../locations/entities/location.enums";
+import { Area } from "../areas/entities/area.entity";
 import { UserLocationMembership } from "../memberships/entities/user-location-membership.entity";
 import { MembershipTransaction } from "../memberships/entities/membership-transaction.entity";
 import {
@@ -72,6 +74,8 @@ export class SeedService implements OnModuleInit {
     private branchRepo: Repository<Branch>,
     @InjectRepository(Location)
     private locationRepo: Repository<Location>,
+    @InjectRepository(Area)
+    private areaRepo: Repository<Area>,
     @InjectRepository(Court)
     private courtRepo: Repository<Court>,
     @InjectRepository(Sport)
@@ -106,6 +110,7 @@ export class SeedService implements OnModuleInit {
       await this.seedCoaches();
       await this.assignCoachCourtAffiliations();
       await this.seedPrivateClubDemoMember();
+      await this.assignUsersToSpringparkLocations();
       console.log("[SeedService] Seed finished.");
     } catch (err) {
       console.error("[SeedService] Seed failed:", err);
@@ -211,27 +216,96 @@ export class SeedService implements OnModuleInit {
       console.log(`[SeedService] Created branch: ${branch.name}`);
     }
 
-    // 3. Locations
-    const locationsData = [
+    // 3. Location hierarchy:
+    // root "Springpark" (managed by super_admin) -> children "Springpark A/B"
+    let root = await this.locationRepo.findOne({
+      where: { name: "Springpark", kind: LocationKind.ROOT },
+    });
+    if (!root) {
+      root = await this.locationRepo.save(
+        this.locationRepo.create({
+          branchId: branch.id,
+          name: "Springpark",
+          address: "Dallas, TX",
+          kind: LocationKind.ROOT,
+          parentLocationId: null,
+          status: "inactive", // hidden from Reserve flow
+          visibility: LocationVisibility.PUBLIC,
+          timezone: "America/Chicago",
+        }),
+      );
+      console.log(`[SeedService] Created root location: ${root.name}`);
+    }
+
+    const locationChildrenData = [
       {
-        name: "Springpark Tennis Center",
+        name: "Springpark A",
         address: "4714 Baldwin St, Dallas, TX 75210",
       },
-      { name: "Downtown Pickleball Club", address: "100 Main St." },
+      {
+        name: "Springpark B",
+        address: "100 Main St, Dallas, TX 75202",
+      },
     ];
 
-    for (const locData of locationsData) {
+    for (const child of locationChildrenData) {
       let location = await this.locationRepo.findOne({
-        where: { name: locData.name },
+        where: { name: child.name },
       });
       if (!location) {
         location = await this.locationRepo.save(
           this.locationRepo.create({
-            ...locData,
             branchId: branch.id,
+            parentLocationId: root.id,
+            kind: LocationKind.CHILD,
+            name: child.name,
+            address: child.address,
+            status: "active",
+            visibility: LocationVisibility.PUBLIC,
+            timezone: "America/Chicago",
           }),
         );
-        console.log(`[SeedService] Created location: ${location.name}`);
+        console.log(`[SeedService] Created location child: ${location.name}`);
+      } else {
+        await this.locationRepo.update(location.id, {
+          branchId: branch.id,
+          parentLocationId: root.id,
+          kind: LocationKind.CHILD,
+          status: "active",
+          visibility: LocationVisibility.PUBLIC,
+          timezone: "America/Chicago",
+          address: child.address,
+        });
+      }
+    }
+
+    // 4. Super admin account
+    const superAdminRole = await this.roleRepo.findOne({
+      where: { name: "super_admin" },
+    });
+    if (superAdminRole) {
+      const superEmail = "superadmin@gmail.com";
+      const existing = await this.userRepo.findOne({
+        where: { email: superEmail, organizationId: org.id },
+      });
+      if (!existing) {
+        const passwordHash = await bcrypt.hash("SuperAdmin123!", 10);
+        await this.userRepo.save(
+          this.userRepo.create({
+            organizationId: org.id,
+            branchId: branch.id,
+            roleId: superAdminRole.id,
+            email: superEmail,
+            passwordHash,
+            fullName: "System Super Admin",
+            firstName: "System",
+            lastName: "Admin",
+            phone: "+14595550000",
+            status: "active",
+            visibility: "private",
+          }),
+        );
+        console.log("[SeedService] Created super admin: superadmin@gmail.com / SuperAdmin123!");
       }
     }
   }
@@ -544,7 +618,7 @@ export class SeedService implements OnModuleInit {
       markers: { lat: number; lng: number; label: string }[];
     }> = [
       {
-        name: "Springpark Tennis Center",
+        name: "Springpark A",
         address: "4714 Baldwin St, Dallas, TX 75210",
         latitude: "32.7492000",
         longitude: "-96.7550000",
@@ -572,8 +646,8 @@ export class SeedService implements OnModuleInit {
         ],
       },
       {
-        name: "Downtown Pickleball Club",
-        address: "100 Main St.",
+        name: "Springpark B",
+        address: "100 Main St, Dallas, TX 75202",
         latitude: "32.7831000",
         longitude: "-96.8065000",
         markers: [
@@ -604,26 +678,16 @@ export class SeedService implements OnModuleInit {
     for (const c of configs) {
       const loc = await this.locationRepo.findOne({ where: { name: c.name } });
       if (!loc) continue;
-      const isPickleballClub = c.name.includes("Pickleball");
       await this.locationRepo.update(loc.id, {
         address: c.address,
         latitude: c.latitude,
         longitude: c.longitude,
         mapMarkers: JSON.stringify(c.markers),
         timezone: "America/Chicago",
-        ...(isPickleballClub
-          ? {
-              visibility: LocationVisibility.PRIVATE,
-              membershipInitiationFeeCents: 50_000,
-              membershipMonthlyFeeCents: 5_000,
-              memberCourtDiscountPercent: 15,
-            }
-          : {
-              visibility: LocationVisibility.PUBLIC,
-              membershipInitiationFeeCents: 0,
-              membershipMonthlyFeeCents: 0,
-              memberCourtDiscountPercent: 0,
-            }),
+        visibility: LocationVisibility.PUBLIC,
+        membershipInitiationFeeCents: 0,
+        membershipMonthlyFeeCents: 0,
+        memberCourtDiscountPercent: 0,
       });
       console.log(`[SeedService] Map metadata updated for: ${c.name}`);
     }
@@ -636,58 +700,55 @@ export class SeedService implements OnModuleInit {
    * Seed a single test booking window for public tennis courts: 08:00–11:00.
    */
   private async seedLocationBookingWindows() {
-    const loc = await this.locationRepo.findOne({
+    const targetLocations = await this.locationRepo.find({
       where: {
-        name: "Springpark Tennis Center",
+        name: In(["Springpark A", "Springpark B"]),
         visibility: LocationVisibility.PUBLIC,
       },
     });
-    if (!loc) {
-      console.log(
-        "[SeedService] seedLocationBookingWindows: public tennis location not found, skipping.",
-      );
+    if (!targetLocations.length) {
+      console.log("[SeedService] seedLocationBookingWindows: no Springpark A/B found, skipping.");
       return;
     }
 
-    // Keep only one canonical window for this location/sport/type.
-    await this.bookingWindowRepo.delete({
-      locationId: loc.id,
-      sport: "tennis",
-      courtType: "outdoor",
-    });
-
-    await this.bookingWindowRepo.save(
-      this.bookingWindowRepo.create({
+    for (const loc of targetLocations) {
+      await this.bookingWindowRepo.delete({
         locationId: loc.id,
         sport: "tennis",
         courtType: "outdoor",
-        windowStartTime: "08:00:00",
-        windowEndTime: "11:00:00",
-        allowedDurationMinutes: "[30,60,90]",
-        slotGridMinutes: 30,
-        sortOrder: 0,
-        isActive: true,
-      }),
-    );
-    console.log(
-      "[SeedService] Booking window reset: 08:00-11:00 (tennis/outdoor @ Springpark Tennis Center)",
-    );
+      });
+      await this.bookingWindowRepo.save(
+        this.bookingWindowRepo.create({
+          locationId: loc.id,
+          sport: "tennis",
+          courtType: "outdoor",
+          windowStartTime: "08:00:00",
+          windowEndTime: "11:00:00",
+          allowedDurationMinutes: "[30,60,90]",
+          slotGridMinutes: 30,
+          sortOrder: 0,
+          isActive: true,
+        }),
+      );
+      console.log(
+        `[SeedService] Booking window reset: 08:00-11:00 (tennis/outdoor @ ${loc.name})`,
+      );
+    }
   }
 
   /**
    * Add only 3 public tennis courts for easier booking-flow testing.
    */
   private async ensureExpandedCourtsAndPrices() {
-    const def = await this.locationRepo.findOne({
+    const locations = await this.locationRepo.find({
       where: {
-        name: "Springpark Tennis Center",
+        name: In(["Springpark A", "Springpark B"]),
         visibility: LocationVisibility.PUBLIC,
       },
+      order: { name: "ASC" },
     });
-    if (!def) {
-      console.log(
-        "[SeedService] ensureExpandedCourtsAndPrices skip: public tennis location missing.",
-      );
+    if (!locations.length) {
+      console.log("[SeedService] ensureExpandedCourtsAndPrices skip: Springpark A/B missing.");
       return;
     }
 
@@ -740,7 +801,7 @@ export class SeedService implements OnModuleInit {
       },
     ];
 
-    const upsert = async (locationId: string, row: CourtSeed) => {
+    const upsert = async (locationId: string, areaId: string, row: CourtSeed) => {
       const media = pickTennisMedia(row.name);
       const court = await this.courtRepo.findOne({
         where: { locationId, name: row.name },
@@ -749,6 +810,7 @@ export class SeedService implements OnModuleInit {
         await this.courtRepo.save(
           this.courtRepo.create({
             locationId,
+            areaId,
             name: row.name,
             sport: row.sport,
             type: row.type,
@@ -765,6 +827,7 @@ export class SeedService implements OnModuleInit {
         return;
       }
       await this.courtRepo.update(court.id, {
+        areaId,
         sport: row.sport,
         type: row.type,
         pricePerHourPublic: row.pricePerHourPublic,
@@ -773,43 +836,150 @@ export class SeedService implements OnModuleInit {
       });
     };
 
-    for (const row of defCourts) {
-      await upsert(def.id, row);
-    }
+    for (const loc of locations) {
+      const areaNames = ["Area 1", "Area 2", "Area 3"];
+      // Cleanup/normalize area rows (avoid duplicates like Area 1,1,1 etc)
+      const allAreasAtLoc = await this.areaRepo.find({
+        where: { locationId: loc.id },
+        order: { createdAt: "ASC" },
+      });
+      const keepSet = new Set(areaNames);
+      const seenArea = new Set<string>();
+      for (const a of allAreasAtLoc) {
+        const duplicated = seenArea.has(a.name);
+        const shouldKeep = keepSet.has(a.name) && !duplicated;
+        if (!shouldKeep) {
+          await this.areaRepo.delete(a.id);
+          continue;
+        }
+        seenArea.add(a.name);
+      }
 
-    // Cleanup: keep exactly Court 1/2/3 at this location.
-    const keepNames = new Set(defCourts.map((c) => c.name));
-    const allAtLocation = await this.courtRepo.find({
-      where: { locationId: def.id },
-      order: { createdAt: "ASC" },
-    });
-
-    const seen = new Set<string>();
-    for (const c of allAtLocation) {
-      const isWanted = keepNames.has(c.name);
-      const isDuplicateWanted = isWanted && seen.has(c.name);
-      if (!isWanted || isDuplicateWanted) {
-        const bookingCount = await this.courtBookingRepo.count({
-          where: { courtId: c.id },
+      const areas: Area[] = [];
+      for (const areaName of areaNames) {
+        const visibility =
+          areaName === "Area 2"
+            ? LocationVisibility.PRIVATE
+            : LocationVisibility.PUBLIC;
+        let area = await this.areaRepo.findOne({
+          where: { locationId: loc.id, name: areaName },
         });
-        if (bookingCount === 0) {
-          await this.courtRepo.delete(c.id);
-          console.log(
-            `[SeedService] Removed extra/duplicate court: ${c.name} (${c.id})`,
+        if (!area) {
+          area = await this.areaRepo.save(
+            this.areaRepo.create({
+              locationId: loc.id,
+              name: areaName,
+              description: `${areaName} at ${loc.name}`,
+              status: "active",
+              visibility,
+            }),
           );
         } else {
-          await this.courtRepo.update(c.id, { status: "maintenance" });
-          console.log(
-            `[SeedService] Marked extra/duplicate court as maintenance (has bookings): ${c.name} (${c.id})`,
-          );
+          await this.areaRepo.update(area.id, { visibility, status: "active" });
         }
-      } else {
-        seen.add(c.name);
+        areas.push(area);
+      }
+
+      for (let i = 0; i < defCourts.length; i += 1) {
+        const row = defCourts[i];
+        const area = areas[i % areas.length];
+        await upsert(loc.id, area.id, row);
+      }
+
+      // Cleanup: keep exactly Court 1/2/3 for each location child.
+      const keepNames = new Set(defCourts.map((c) => c.name));
+      const allAtLocation = await this.courtRepo.find({
+        where: { locationId: loc.id },
+        order: { createdAt: "ASC" },
+      });
+
+      const seen = new Set<string>();
+      for (const c of allAtLocation) {
+        const isWanted = keepNames.has(c.name);
+        const isDuplicateWanted = isWanted && seen.has(c.name);
+        if (!isWanted || isDuplicateWanted) {
+          const bookingCount = await this.courtBookingRepo.count({
+            where: { courtId: c.id },
+          });
+          if (bookingCount === 0) {
+            await this.courtRepo.delete(c.id);
+            console.log(
+              `[SeedService] Removed extra/duplicate court: ${c.name} (${c.id})`,
+            );
+          } else {
+            await this.courtRepo.update(c.id, { status: "maintenance" });
+            console.log(
+              `[SeedService] Marked extra/duplicate court as maintenance (has bookings): ${c.name} (${c.id})`,
+            );
+          }
+        } else {
+          seen.add(c.name);
+        }
+      }
+    }
+
+    console.log("[SeedService] Courts catalog: Springpark A/B seeded with Area 1/2/3 + Court 1/2/3.");
+  }
+
+  /**
+   * Split seeded users by Springpark A/B so each user only sees their own location data.
+   */
+  private async assignUsersToSpringparkLocations() {
+    const [springparkA, springparkB] = await Promise.all([
+      this.locationRepo.findOne({ where: { name: "Springpark A" } }),
+      this.locationRepo.findOne({ where: { name: "Springpark B" } }),
+    ]);
+    if (!springparkA || !springparkB) return;
+
+    const users = await this.userRepo
+      .createQueryBuilder("u")
+      .leftJoinAndSelect("u.role", "r")
+      .where("r.name NOT IN (:...roles)", { roles: ["super_admin", "admin"] })
+      .orderBy("u.createdAt", "ASC")
+      .getMany();
+
+    for (let i = 0; i < users.length; i += 1) {
+      const user = users[i];
+      const targetLocation = i % 2 === 0 ? springparkA : springparkB;
+      const existingMemberships = await this.membershipRepo.find({
+        where: { userId: user.id },
+      });
+
+      for (const m of existingMemberships) {
+        if (m.locationId !== targetLocation.id) {
+          await this.membershipRepo.update(m.id, {
+            status: MembershipStatus.CANCELLED,
+            cancelledAt: new Date(),
+          });
+        }
+      }
+
+      let membership = existingMemberships.find(
+        (m) => m.locationId === targetLocation.id,
+      );
+      if (!membership) {
+        const periodEnd = new Date();
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
+        membership = await this.membershipRepo.save(
+          this.membershipRepo.create({
+            userId: user.id,
+            locationId: targetLocation.id,
+            status: MembershipStatus.ACTIVE,
+            initiationPaidAt: new Date(),
+            currentPeriodStart: new Date(),
+            currentPeriodEnd: periodEnd,
+            lastMonthlyPaidAt: new Date(),
+          }),
+        );
+      } else if (membership.status !== MembershipStatus.ACTIVE) {
+        await this.membershipRepo.update(membership.id, {
+          status: MembershipStatus.ACTIVE,
+        });
       }
     }
 
     console.log(
-      `[SeedService] Courts catalog: DEF ${defCourts.length} public tennis courts (upserted).`,
+      `[SeedService] Users split by location memberships: ${springparkA.name} / ${springparkB.name}`,
     );
   }
 
@@ -827,10 +997,9 @@ export class SeedService implements OnModuleInit {
       where: { name: "player" },
     });
     const loc = await this.locationRepo.findOne({
-      where: { name: "Downtown Pickleball Club" },
+      where: { name: "Springpark B" },
     });
     if (!org || !branch || !playerRole || !loc) return;
-    if (loc.visibility !== LocationVisibility.PRIVATE) return;
 
     const passwordHash = await bcrypt.hash("Password123!", 10);
     const demoMembers: Array<{
@@ -845,7 +1014,7 @@ export class SeedService implements OnModuleInit {
       },
       {
         email: "pickleball-member2@CodyPlay.com",
-        fullName: "Downtown Pickleball Member Two",
+        fullName: "Springpark B Member Two",
         phone: "+15555550888",
       },
     ];

@@ -6,12 +6,14 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  OneToMany,
 } from "typeorm";
 import { Branch } from "../../branches/entities/branch.entity";
 import {
   LocationVisibility,
   MemberCourtPriceBasis,
 } from "./location.enums";
+import { LocationKind } from "./location-kind.enum";
 
 @Entity("locations")
 export class Location {
@@ -20,6 +22,12 @@ export class Location {
 
   @Column()
   branchId: string;
+
+  @Column({ type: "uuid", nullable: true })
+  parentLocationId: string | null;
+
+  @Column({ type: "varchar", default: LocationKind.CHILD })
+  kind: LocationKind;
 
   @Column()
   name: string;
@@ -79,4 +87,11 @@ export class Location {
   @ManyToOne(() => Branch, { onDelete: "CASCADE" })
   @JoinColumn({ name: "branchId" })
   branch: Branch;
+
+  @ManyToOne(() => Location, { onDelete: "SET NULL", nullable: true })
+  @JoinColumn({ name: "parentLocationId" })
+  parentLocation: Location | null;
+
+  @OneToMany(() => Location, (loc) => loc.parentLocation)
+  children: Location[];
 }

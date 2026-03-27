@@ -27,7 +27,13 @@
     "docker:logs:postgres": "docker compose logs -f postgres",
     "docker:logs:redis": "docker compose logs -f redis",
     "docker:build": "docker compose build",
-    "db:backfill-phone": "bash scripts/run-backfill-phone.sh"
+    "db:backfill-phone": "bash scripts/run-backfill-phone.sh",
+    "typeorm": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d apps/api/src/database/typeorm-cli.datasource.ts",
+    "migration:generate": "pnpm typeorm migration:generate apps/api/src/database/migrations/$npm_config_name",
+    "migration:create": "pnpm typeorm migration:create apps/api/src/database/migrations/$npm_config_name",
+    "migration:run": "pnpm typeorm migration:run",
+    "migration:revert": "pnpm typeorm migration:revert",
+    "migration:show": "pnpm typeorm migration:show"
   },
   "dependencies": {
     "@app/common": "*",
@@ -42,6 +48,7 @@
     "@nestjs/passport": "^10.0.3",
     "@nestjs/platform-express": "^10.2.10",
     "@nestjs/platform-socket.io": "^10.4.22",
+    "@nestjs/schedule": "^6.1.1",
     "@nestjs/swagger": "^7.1.17",
     "@nestjs/typeorm": "^10.0.2",
     "@nestjs/websockets": "^10.4.22",
@@ -52,7 +59,9 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.0",
     "cookie-parser": "^1.4.7",
+    "googleapis": "^171.4.0",
     "ioredis": "^5.4.1",
+    "libphonenumber-js": "^1.12.40",
     "nodemailer": "^6.9.7",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
@@ -60,6 +69,7 @@
     "passport-local": "^1.0.0",
     "pg": "^8.11.3",
     "reflect-metadata": "^0.1.13",
+    "resend": "^6.9.4",
     "rxjs": "^7.8.1",
     "socket.io": "^4.8.3",
     "typeorm": "^0.3.20"

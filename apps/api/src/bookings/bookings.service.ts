@@ -1,4 +1,10 @@
-import { Injectable, ConflictException, NotFoundException } from "@nestjs/common";
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { CourtBookingHandler } from "./handlers/court-booking.handler";
@@ -14,6 +20,11 @@ import {
 } from "./dto/court-wizard-query.dto";
 import { BookingKind } from "./interfaces/booking-handler.interface";
 import { Court } from "../courts/entities/court.entity";
+import { BookingMailService } from "../notifications/booking-mail.service";
+import { Area } from "../areas/entities/area.entity";
+import { UserLocationMembership } from "../memberships/entities/user-location-membership.entity";
+import { MembershipStatus } from "../memberships/entities/membership.enums";
+import { LocationVisibility } from "../locations/entities/location.enums";
 
 /**
  * Booking Service (Parent / Facade).
@@ -27,9 +38,35 @@ export class BookingsService {
     private readonly courtBookingHandler: CourtBookingHandler,
     private readonly coachSessionHandler: CoachSessionHandler,
     private readonly courtWizardAvailability: CourtWizardAvailabilityService,
+    private readonly bookingMailService: BookingMailService,
     @InjectRepository(Court)
     private readonly courtRepo: Repository<Court>,
+    @InjectRepository(Area)
+    private readonly areaRepo: Repository<Area>,
+    @InjectRepository(UserLocationMembership)
+    private readonly membershipRepo: Repository<UserLocationMembership>,
   ) {}
+
+  private async assertAreaAccess(userId: string, locationId: string, areaId?: string) {
+    if (!areaId) return;
+    const area = await this.areaRepo.findOne({ where: { id: areaId } });
+    if (!area || area.locationId !== locationId || area.status !== "active") {
+      throw new BadRequestException("Area is invalid for this location");
+    }
+    if (area.visibility === LocationVisibility.PRIVATE) {
+      const membership = await this.membershipRepo.findOne({
+        where: { userId, locationId },
+      });
+      const canAccess =
+        !!membership &&
+        [MembershipStatus.ACTIVE, MembershipStatus.GRACE, MembershipStatus.PENDING_PAYMENT].includes(
+          membership.status,
+        );
+      if (!canAccess) {
+        throw new ForbiddenException("This area requires an active membership");
+      }
+    }
+  }
 
   // ----- Court booking (sân, optional coach) -----
 
@@ -42,7 +79,7 @@ export class BookingsService {
     const duration =
       dto.durationMinutes ??
       this.getDurationMinutes(dto.startTime, dto.endTime);
-    return this.courtBookingHandler.create({
+    const result = await this.courtBookingHandler.create({
       userId,
       organizationId: organizationId ?? null,
       branchId: branchId ?? null,
@@ -54,6 +91,8 @@ export class BookingsService {
       durationMinutes: duration,
       locationBookingWindowId: dto.locationBookingWindowId,
     });
+    void this.bookingMailService.sendBookingConfirmation(result.id, "created");
+    return result;
   }
 
   async getCourtAvailability(
@@ -96,6 +135,7 @@ export class BookingsService {
     return this.courtWizardAvailability.computeAvailableSlots({
       userId,
       locationId: q.locationId,
+      areaId: q.areaId,
       sport: q.sport,
       courtType: q.courtType,
       bookingDate: q.bookingDate,
@@ -114,9 +154,16 @@ export class BookingsService {
     organizationId?: string | null,
     branchId?: string | null,
   ) {
-    // Find all active courts for location+sport+courtType
+    await this.assertAreaAccess(userId, dto.locationId, dto.areaId);
+    // Find all active courts for location+sport+courtType(+optional area)
     const courts = await this.courtRepo.find({
-      where: { locationId: dto.locationId, sport: dto.sport, type: dto.courtType, status: "active" },
+      where: {
+        locationId: dto.locationId,
+        ...(dto.areaId ? { areaId: dto.areaId } : {}),
+        sport: dto.sport,
+        type: dto.courtType,
+        status: "active",
+      },
       order: { name: "ASC" },
     });
 
@@ -147,7 +194,7 @@ export class BookingsService {
     }
 
     const duration = dto.durationMinutes ?? this.getDurationMinutes(dto.startTime, dto.endTime);
-    return this.courtBookingHandler.create({
+    const result = await this.courtBookingHandler.create({
       userId,
       organizationId: organizationId ?? null,
       branchId: branchId ?? null,
@@ -158,6 +205,8 @@ export class BookingsService {
       coachId: dto.coachId,
       durationMinutes: duration,
     });
+    void this.bookingMailService.sendBookingConfirmation(result.id, "created");
+    return result;
   }
 
   /** Update existing slot booking row (reschedule) — same payload shape as create slot. */
@@ -166,17 +215,28 @@ export class BookingsService {
     bookingId: string,
     dto: CreateCourtSlotBookingDto,
   ) {
+    await this.assertAreaAccess(userId, dto.locationId, dto.areaId);
     const duration =
       dto.durationMinutes ?? this.getDurationMinutes(dto.startTime, dto.endTime);
-    return this.courtBookingHandler.rescheduleSlotBooking(userId, bookingId, {
-      locationId: dto.locationId,
-      sport: dto.sport,
-      courtType: dto.courtType,
-      bookingDate: dto.bookingDate,
-      startTime: dto.startTime,
-      endTime: dto.endTime,
-      durationMinutes: duration,
-    });
+    const result = await this.courtBookingHandler.rescheduleSlotBooking(
+      userId,
+      bookingId,
+      {
+        locationId: dto.locationId,
+        areaId: dto.areaId,
+        sport: dto.sport,
+        courtType: dto.courtType,
+        bookingDate: dto.bookingDate,
+        startTime: dto.startTime,
+        endTime: dto.endTime,
+        durationMinutes: duration,
+      },
+    );
+    void this.bookingMailService.sendBookingConfirmation(
+      result.id,
+      "rescheduled",
+    );
+    return result;
   }
 
   async checkCourtAvailability(

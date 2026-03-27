@@ -71,6 +71,8 @@ services:
       EMAIL_USER: ${EMAIL_USER:-}
       EMAIL_PASSWORD: ${EMAIL_PASSWORD:-}
       EMAIL_FROM: ${EMAIL_FROM:-noreply@booking-tennis.com}
+      MAIL_PROVIDER: ${MAIL_PROVIDER:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3001}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       LOGIN_OTP_ENABLED: ${LOGIN_OTP_ENABLED:-false}

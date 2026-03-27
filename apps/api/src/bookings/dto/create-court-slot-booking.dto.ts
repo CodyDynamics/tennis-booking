@@ -20,6 +20,11 @@ export class CreateCourtSlotBookingDto {
   @IsUUID()
   locationId: string;
 
+  @ApiPropertyOptional({ description: "Area UUID (recommended)" })
+  @IsOptional()
+  @IsUUID()
+  areaId?: string;
+
   @ApiProperty({ enum: ["tennis", "pickleball", "ball-machine"] })
   @IsIn(["tennis", "pickleball", "ball-machine"])
   sport: string;

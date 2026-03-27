@@ -13,6 +13,11 @@ export class CreateCourtDto {
   @IsString()
   locationId: string;
 
+  @ApiPropertyOptional({ description: "Area UUID (under location child)" })
+  @IsOptional()
+  @IsString()
+  areaId?: string;
+
   @ApiProperty({ example: "Court 1", description: "Court name" })
   @IsString()
   name: string;
@@ -29,6 +34,11 @@ export class CreateCourtDto {
   @IsOptional()
   @IsIn(["tennis", "pickleball", "ball-machine"])
   sport?: string;
+
+  @ApiPropertyOptional({ description: "Sport UUID (preferred over sport code string)" })
+  @IsOptional()
+  @IsString()
+  sportId?: string;
 
   @ApiPropertyOptional({
     example: 20,

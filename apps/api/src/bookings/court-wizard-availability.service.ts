@@ -20,6 +20,7 @@ import {
 } from "./entities/coach-session.entity";
 import { MembershipStatus } from "../memberships/entities/membership.enums";
 import { UserLocationMembership } from "../memberships/entities/user-location-membership.entity";
+import { Area } from "../areas/entities/area.entity";
 import {
   wallClockMinutesNowInTimeZone,
   ymdTodayInIanaTimeZone,
@@ -131,6 +132,8 @@ export class CourtWizardAvailabilityService {
     private readonly coachSessionRepo: Repository<CoachSession>,
     @InjectRepository(UserLocationMembership)
     private readonly membershipRepo: Repository<UserLocationMembership>,
+    @InjectRepository(Area)
+    private readonly areaRepo: Repository<Area>,
   ) {}
 
   private async assertCanAccessLocation(userId: string, location: Location) {
@@ -146,6 +149,33 @@ export class CourtWizardAvailabilityService {
       throw new ForbiddenException(
         "An active membership is required to view booking windows at this private location",
       );
+    }
+  }
+
+  private async assertCanAccessArea(
+    userId: string,
+    locationId: string,
+    areaId?: string,
+  ): Promise<void> {
+    if (!areaId) return;
+    const area = await this.areaRepo.findOne({ where: { id: areaId } });
+    if (!area || area.locationId !== locationId || area.status !== "active") {
+      throw new BadRequestException("Area is invalid for this location");
+    }
+    if (area.visibility === LocationVisibility.PRIVATE) {
+      const m = await this.membershipRepo.findOne({
+        where: { userId, locationId },
+      });
+      const canAccess =
+        !!m &&
+        [MembershipStatus.ACTIVE, MembershipStatus.GRACE, MembershipStatus.PENDING_PAYMENT].includes(
+          m.status,
+        );
+      if (!canAccess) {
+        throw new ForbiddenException(
+          "An active membership is required to book this private area",
+        );
+      }
     }
   }
 
@@ -357,6 +387,7 @@ export class CourtWizardAvailabilityService {
   async computeAvailableSlots(params: {
     userId: string;
     locationId: string;
+    areaId?: string;
     sport: string;
     courtType: string;
     bookingDate: string;
@@ -367,6 +398,7 @@ export class CourtWizardAvailabilityService {
     const {
       userId,
       locationId,
+      areaId,
       sport,
       courtType,
       bookingDate,
@@ -377,6 +409,7 @@ export class CourtWizardAvailabilityService {
     const location = await this.locationRepo.findOne({ where: { id: locationId } });
     if (!location) throw new NotFoundException("Location not found");
     await this.assertCanAccessLocation(userId, location);
+    await this.assertCanAccessArea(userId, locationId, areaId);
 
     const dateStr = bookingDate.slice(0, 10);
     const todayYmd = ymdTodayInIanaTimeZone(location.timezone);
@@ -385,7 +418,13 @@ export class CourtWizardAvailabilityService {
     }
 
     const courts = await this.courtRepo.find({
-      where: { locationId, sport, type: courtType, status: "active" },
+      where: {
+        locationId,
+        ...(areaId ? { areaId } : {}),
+        sport,
+        type: courtType,
+        status: "active",
+      },
       order: { name: "ASC" },
     });
 

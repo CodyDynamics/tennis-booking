@@ -349,6 +349,7 @@ export class CourtBookingHandler implements IBookingHandler {
     bookingId: string,
     dto: {
       locationId: string;
+      areaId?: string;
       sport: string;
       courtType: string;
       bookingDate: string;
@@ -392,6 +393,7 @@ export class CourtBookingHandler implements IBookingHandler {
     const courts = await courtRepo.find({
       where: {
         locationId: dto.locationId,
+        ...(dto.areaId ? { areaId: dto.areaId } : {}),
         sport: dto.sport,
         type: dto.courtType,
         status: "active",
@@ -518,6 +520,7 @@ export class CourtBookingHandler implements IBookingHandler {
     booking.endTime = dto.endTime;
     booking.durationMinutes = durationMinutes;
     booking.totalPrice = String(totalPrice.toFixed(2));
+    booking.reminder30EmailSentAt = null;
 
     try {
       const saved = await this.courtBookingRepo.save(booking);

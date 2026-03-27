@@ -152,11 +152,9 @@ describe("AuthService", () => {
       password: "password123",
       fullName: "New User",
       phone: "+15550000001",
-      roleId: "role-uuid",
     };
 
     it("should register a new user and return user + tokens", async () => {
-      roleRepo.findOne.mockResolvedValue(mockRole);
       userRepo.find.mockResolvedValue([]);
       userRepo.save.mockResolvedValue({
         ...mockUser,
@@ -186,7 +184,6 @@ describe("AuthService", () => {
     });
 
     it("should throw BadRequestException when email already exists", async () => {
-      roleRepo.findOne.mockResolvedValue(mockRole);
       userRepo.find.mockResolvedValue([{ ...mockUser, organizationId: null }]);
 
       await expect(service.register(registerDto)).rejects.toThrow(

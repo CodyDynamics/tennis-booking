@@ -40,3 +40,26 @@ After saving `.env`, restart the backend and try sending mail (forgot password o
 
 - An App Password is **not** your normal Gmail password.
 - If you change your Google password or disable 2-Step Verification, App Passwords may stop working — create a new App Password if needed.
+- To use **Resend** instead of SMTP, see [RESEND_SETUP.md](./RESEND_SETUP.md) (`MAIL_PROVIDER=resend` and `RESEND_API_KEY`), including resend.dev deliverability test scenarios.
+
+## Gmail API provider (`MAIL_PROVIDER=cloud`)
+
+If you want to send mail without SMTP, this project supports Gmail API using OAuth credentials from Google API Console.
+
+Required env vars:
+
+```env
+MAIL_PROVIDER=cloud
+GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=xxxx
+GOOGLE_REFRESH_TOKEN=xxxx
+GOOGLE_SENDER_EMAIL=your-email@gmail.com
+GOOGLE_OAUTH_REDIRECT_URI=https://developers.google.com/oauthplayground
+EMAIL_FROM=Booking Tennis <your-email@gmail.com>
+```
+
+Notes:
+
+- `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` come from OAuth Client in Google API Console.
+- `GOOGLE_REFRESH_TOKEN` is required so backend can refresh access token automatically.
+- `GOOGLE_SENDER_EMAIL` is the Gmail account to send as (`me` is used when omitted).

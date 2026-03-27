@@ -7,6 +7,7 @@ import { Coach } from "../coaches/entities/coach.entity";
 import { CreateCourtDto } from "./dto/create-court.dto";
 import { UpdateCourtDto } from "./dto/update-court.dto";
 import { LocationBookingWindow } from "../locations/entities/location-booking-window.entity";
+import { Sport } from "../sports/entities/sport.entity";
 
 /** @deprecated Use pricePerHourPublic; kept on API responses for backward compatibility */
 export type CourtWithLegacyPrice = Court & { pricePerHour: number };
@@ -20,6 +21,8 @@ export class CourtsService {
     private readonly coachRepo: Repository<Coach>,
     @InjectRepository(LocationBookingWindow)
     private readonly bookingWindowRepo: Repository<LocationBookingWindow>,
+    @InjectRepository(Sport)
+    private readonly sportRepo: Repository<Sport>,
   ) {}
 
   private validateWindowRange(start?: string, end?: string) {
@@ -93,8 +96,14 @@ export class CourtsService {
       ...rest
     } = dto;
     const pub = pricePerHourPublic ?? pricePerHour ?? 0;
+    let resolvedSport = dto.sport;
+    if (dto.sportId) {
+      const sport = await this.sportRepo.findOne({ where: { id: dto.sportId } });
+      resolvedSport = sport?.code ?? dto.sport;
+    }
     const court = this.courtRepo.create({
       ...rest,
+      sport: resolvedSport ?? "tennis",
       pricePerHourPublic: String(pub),
       pricePerHourMember:
         pricePerHourMember !== undefined && pricePerHourMember !== null
@@ -114,6 +123,7 @@ export class CourtsService {
     status?: string,
     search?: string,
     sport?: string,
+    sportId?: string,
     pageIndex = 0,
     pageSize = 500,
   ): Promise<ListResponse<CourtWithLegacyPrice>> {
@@ -124,6 +134,7 @@ export class CourtsService {
     if (branchId) qb.andWhere("location.branchId = :branchId", { branchId });
     if (status) qb.andWhere("court.status = :status", { status });
     if (sport) qb.andWhere("court.sport = :sport", { sport });
+    if (sportId) qb.andWhere("court.sportId = :sportId", { sportId });
     if (search && search.trim()) {
       qb.andWhere("LOWER(court.name) LIKE :q", {
         q: `%${search.trim().toLowerCase()}%`,
@@ -169,7 +180,14 @@ export class CourtsService {
       pricePerHourMember,
       ...rest
     } = dto;
-    Object.assign(row, rest);
+    const next: Partial<Court> = { ...rest };
+    if (dto.sportId) {
+      const sportRef = await this.sportRepo.findOne({ where: { id: dto.sportId } });
+      next.sport = sportRef?.code ?? dto.sport ?? row.sport;
+    } else if (dto.sport !== undefined) {
+      next.sport = dto.sport;
+    }
+    Object.assign(row, next);
     if (pricePerHourPublic !== undefined || pricePerHour !== undefined) {
       const pub = pricePerHourPublic ?? pricePerHour;
       row.pricePerHourPublic = String(pub ?? row.pricePerHourPublic);

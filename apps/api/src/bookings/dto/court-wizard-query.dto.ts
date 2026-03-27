@@ -41,6 +41,11 @@ export class CourtWizardAvailabilityQueryDto extends CourtWizardWindowsQueryDto 
 
 /** New flow: no windowId — backend aggregates all windows automatically. */
 export class CourtSlotQueryDto extends CourtWizardWindowsQueryDto {
+  @ApiPropertyOptional({ description: "Area UUID (optional scope for private/public area gating)" })
+  @IsOptional()
+  @IsUUID()
+  areaId?: string;
+
   @ApiProperty({ example: "2026-03-26" })
   @IsDateString()
   bookingDate: string;

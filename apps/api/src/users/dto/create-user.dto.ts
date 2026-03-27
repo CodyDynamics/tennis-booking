@@ -5,6 +5,7 @@ import {
   MinLength,
   IsOptional,
   IsUUID,
+  IsBoolean,
 } from "class-validator";
 
 export class CreateUserDto {
@@ -20,6 +21,16 @@ export class CreateUserDto {
   @ApiProperty({ example: "John Doe" })
   @IsString()
   fullName: string;
+
+  @ApiPropertyOptional({ example: "John" })
+  @IsOptional()
+  @IsString()
+  firstName?: string;
+
+  @ApiPropertyOptional({ example: "Doe" })
+  @IsOptional()
+  @IsString()
+  lastName?: string;
 
   @ApiProperty({ example: "+15551234567" })
   @IsString()
@@ -43,4 +54,16 @@ export class CreateUserDto {
   @ApiProperty({ description: "Role UUID" })
   @IsUUID()
   roleId: string;
+
+  @ApiPropertyOptional({
+    description: "If true, user must change password after first successful login.",
+  })
+  @IsOptional()
+  @IsBoolean()
+  mustChangePasswordOnFirstLogin?: boolean;
+
+  @ApiPropertyOptional({ description: "Optional location-child membership to assign" })
+  @IsOptional()
+  @IsUUID()
+  membershipLocationId?: string;
 }

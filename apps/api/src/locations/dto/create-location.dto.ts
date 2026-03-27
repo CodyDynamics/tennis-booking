@@ -12,11 +12,22 @@ import {
   LocationVisibility,
   MemberCourtPriceBasis,
 } from "../entities/location.enums";
+import { LocationKind } from "../entities/location-kind.enum";
 
 export class CreateLocationDto {
   @ApiProperty()
   @IsUUID()
   branchId: string;
+
+  @ApiPropertyOptional({ description: "Parent location UUID (for location child)" })
+  @IsOptional()
+  @IsUUID()
+  parentLocationId?: string;
+
+  @ApiPropertyOptional({ enum: LocationKind, default: LocationKind.CHILD })
+  @IsOptional()
+  @IsIn([LocationKind.ROOT, LocationKind.CHILD])
+  kind?: LocationKind;
 
   @ApiProperty()
   @IsString()

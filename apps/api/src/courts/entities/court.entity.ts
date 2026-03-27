@@ -8,6 +8,8 @@ import {
   JoinColumn,
 } from "typeorm";
 import { Location } from "../../locations/entities/location.entity";
+import { Area } from "../../areas/entities/area.entity";
+import { Sport } from "../../sports/entities/sport.entity";
 
 @Entity("courts")
 export class Court {
@@ -16,6 +18,12 @@ export class Court {
 
   @Column({ type: "varchar", nullable: true })
   locationId: string | null;
+
+  @Column({ type: "uuid", nullable: true })
+  areaId: string | null;
+
+  @Column({ type: "uuid", nullable: true })
+  sportId: string | null;
 
   @Column()
   name: string;
@@ -63,4 +71,12 @@ export class Court {
   @ManyToOne(() => Location, { onDelete: "SET NULL", nullable: true })
   @JoinColumn({ name: "locationId" })
   location: Location | null;
+
+  @ManyToOne(() => Area, { onDelete: "SET NULL", nullable: true })
+  @JoinColumn({ name: "areaId" })
+  area: Area | null;
+
+  @ManyToOne(() => Sport, { onDelete: "SET NULL", nullable: true })
+  @JoinColumn({ name: "sportId" })
+  sportRef: Sport | null;
 }

@@ -12,6 +12,7 @@ import { LocationBookingWindow } from "../locations/entities/location-booking-wi
 import { UserLocationMembership } from "../memberships/entities/user-location-membership.entity";
 import { MembershipTransaction } from "../memberships/entities/membership-transaction.entity";
 import { CourtBooking } from "../bookings/entities/court-booking.entity";
+import { Area } from "../areas/entities/area.entity";
 import { SeedService } from "./seed.service";
 
 @Module({
@@ -29,6 +30,7 @@ import { SeedService } from "./seed.service";
       UserLocationMembership,
       MembershipTransaction,
       CourtBooking,
+      Area,
     ]),
   ],
   providers: [SeedService],

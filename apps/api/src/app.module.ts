@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { JwtModule } from "@nestjs/jwt";
+import { ScheduleModule } from "@nestjs/schedule";
 
 import configuration from "./config/configuration";
 import { AuthModule } from "./auth/auth.module";
@@ -18,6 +19,7 @@ import { Branch } from "./branches/entities/branch.entity";
 import { Organization } from "./organizations/entities/organization.entity";
 import { Location } from "./locations/entities/location.entity";
 import { LocationBookingWindow } from "./locations/entities/location-booking-window.entity";
+import { Area } from "./areas/entities/area.entity";
 import { Court } from "./courts/entities/court.entity";
 import { UserLocationMembership } from "./memberships/entities/user-location-membership.entity";
 import { MembershipTransaction } from "./memberships/entities/membership-transaction.entity";
@@ -28,6 +30,7 @@ import { CoachSession } from "./bookings/entities/coach-session.entity";
 import { BookingCommand } from "./bookings/entities/booking-command.entity";
 
 import { BranchesModule } from "./branches/branches.module";
+import { AreasModule } from "./areas/areas.module";
 import { CourtsModule } from "./courts/courts.module";
 import { CoachesModule } from "./coaches/coaches.module";
 import { BookingsModule } from "./bookings/bookings.module";
@@ -36,9 +39,11 @@ import { OrganizationsModule } from "./organizations/organizations.module";
 import { SportsModule } from "./sports/sports.module";
 import { RedisModule } from "./redis/redis.module";
 import { AdminModule } from "./admin/admin.module";
+import { NotificationsModule } from "./notifications/notifications.module";
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: [".env", ".env.local"],
@@ -64,6 +69,7 @@ import { AdminModule } from "./admin/admin.module";
           Organization,
           Location,
           LocationBookingWindow,
+          Area,
           Court,
           UserLocationMembership,
           MembershipTransaction,
@@ -112,8 +118,10 @@ import { AdminModule } from "./admin/admin.module";
     RsaModule,
     HealthModule,
     BranchesModule,
+    AreasModule,
     CourtsModule,
     CoachesModule,
+    NotificationsModule,
     BookingsModule,
     RolesModule,
     OrganizationsModule,

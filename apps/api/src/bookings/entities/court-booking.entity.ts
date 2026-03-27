@@ -113,6 +113,10 @@ export class CourtBooking {
   @Column({ type: "varchar", default: CourtBookingStatus.PENDING })
   bookingStatus: CourtBookingStatus;
 
+  /** Set when the "30 minutes before start" reminder email was sent (UTC). */
+  @Column({ type: "timestamptz", nullable: true })
+  reminder30EmailSentAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

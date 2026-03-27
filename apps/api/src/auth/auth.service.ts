@@ -52,22 +52,13 @@ export class AuthService {
       email,
       password,
       fullName,
+      firstName,
+      lastName,
       phone,
       homeAddress,
       organizationId,
       branchId,
-      roleId,
     } = registerDto;
-
-    const role = await this.roleRepo.findOne({ where: { id: roleId } });
-    if (!role) {
-      throw new BadRequestException("Invalid role");
-    }
-    if (role.name === "admin" || role.name === "super_admin") {
-      throw new BadRequestException(
-        "Registration with admin or super_admin role is not allowed",
-      );
-    }
 
     const byEmail = await this.userRepo.find({ where: { email } });
     const existingUser = byEmail.find(
@@ -78,17 +69,23 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
+    const resolvedFirstName = firstName?.trim() || fullName.trim().split(/\s+/)[0] || null;
+    const resolvedLastName =
+      lastName?.trim() ||
+      (fullName.trim().split(/\s+/).slice(1).join(" ").trim() || null);
 
     const user = await this.userRepo.save(
       this.userRepo.create({
         email,
         passwordHash,
         fullName,
+        firstName: resolvedFirstName,
+        lastName: resolvedLastName,
         phone,
         homeAddress: homeAddress ?? null,
         organizationId,
         branchId,
-        roleId,
+        roleId: null,
         courtId: null,
         visibility: "public",
       }),
@@ -103,7 +100,7 @@ export class AuthService {
       userWithRole.id,
       userWithRole.email,
       userWithRole.organizationId ?? undefined,
-      userWithRole.roleId,
+      userWithRole.roleId ?? undefined,
       { rememberMe: false },
     );
 
@@ -112,7 +109,9 @@ export class AuthService {
         id: userWithRole.id,
         email: userWithRole.email,
         fullName: userWithRole.fullName,
-        role: userWithRole.role.name,
+        role: userWithRole.role?.name,
+        mustChangePasswordOnFirstLogin:
+          userWithRole.mustChangePasswordOnFirstLogin,
       },
       ...tokens,
     };
@@ -147,7 +146,7 @@ export class AuthService {
       user.id,
       user.email,
       user.organizationId ?? undefined,
-      user.roleId,
+      user.roleId ?? undefined,
       { rememberMe: loginDto.rememberMe === true },
     );
 
@@ -156,7 +155,8 @@ export class AuthService {
         id: user.id,
         email: user.email,
         fullName: user.fullName,
-        role: user.role.name,
+        role: user.role?.name,
+        mustChangePasswordOnFirstLogin: user.mustChangePasswordOnFirstLogin,
       },
       ...tokens,
     };
@@ -217,7 +217,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         fullName: user.fullName,
-        role: user.role.name,
+        role: user.role?.name,
       },
       ...tokens,
     };
@@ -324,7 +324,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         fullName: user.fullName,
-        role: user.role.name,
+        role: user.role?.name,
       },
       ...tokens,
     };
@@ -357,7 +357,7 @@ export class AuthService {
       user.id,
       user.email,
       user.organizationId ?? undefined,
-      user.roleId,
+      user.roleId ?? undefined,
       { rememberMe: row.longSession },
     );
 
@@ -368,7 +368,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         fullName: user.fullName,
-        role: user.role.name,
+        role: user.role?.name,
       },
     };
   }

@@ -15,5 +15,6 @@ export class AuthResponseDto {
     role?: string;
     organizationId?: string;
     branchId?: string;
+    mustChangePasswordOnFirstLogin?: boolean;
   };
 }

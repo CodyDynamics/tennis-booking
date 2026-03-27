@@ -15,6 +15,8 @@ import { UserLocationMembership } from "../memberships/entities/user-location-me
 import { Location } from "../locations/entities/location.entity";
 import { LocationBookingWindow } from "../locations/entities/location-booking-window.entity";
 import { Court } from "../courts/entities/court.entity";
+import { NotificationsModule } from "../notifications/notifications.module";
+import { Area } from "../areas/entities/area.entity";
 
 @Module({
   imports: [
@@ -26,9 +28,11 @@ import { Court } from "../courts/entities/court.entity";
       Location,
       LocationBookingWindow,
       Court,
+      Area,
     ]),
     CourtsModule,
     CoachesModule,
+    NotificationsModule,
   ],
   controllers: [BookingsController],
   providers: [

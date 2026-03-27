@@ -47,12 +47,18 @@ export class UsersController {
   @ApiOperation({ summary: "List users (admin)" })
   @ApiQuery({ name: "roleId", required: false })
   @ApiQuery({ name: "search", required: false })
+  @ApiQuery({ name: "onlyMembership", required: false, type: Boolean })
   @ApiResponse({ status: 200, description: "Array of users" })
   async findAll(
     @Query("roleId") roleId?: string,
     @Query("search") search?: string,
+    @Query("onlyMembership") onlyMembership?: string,
   ) {
-    return this.usersService.findAll(roleId, search);
+    return this.usersService.findAll(
+      roleId,
+      search,
+      onlyMembership === "true" || onlyMembership === "1",
+    );
   }
 
   @Get(":id")
@@ -60,10 +66,17 @@ export class UsersController {
   @RequirePermission("users:view")
   @ApiOperation({ summary: "Get user by id" })
   @ApiParam({ name: "id" })
+  @ApiQuery({ name: "includeMemberships", required: false, type: Boolean })
   @ApiResponse({ status: 200 })
   @ApiResponse({ status: 404, description: "User not found" })
-  async findOne(@Param("id") id: string) {
-    return this.usersService.findOne(id);
+  async findOne(
+    @Param("id") id: string,
+    @Query("includeMemberships") includeMemberships?: string,
+  ) {
+    return this.usersService.findOne(
+      id,
+      includeMemberships === "true" || includeMemberships === "1",
+    );
   }
 
   @Post()

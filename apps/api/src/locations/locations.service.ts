@@ -3,6 +3,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Brackets, Repository } from "typeorm";
 import { buildListResponse, ListResponse } from "@app/common";
 import { Location } from "./entities/location.entity";
+import { LocationKind } from "./entities/location-kind.enum";
 import { LocationVisibility } from "./entities/location.enums";
 import { MembershipStatus } from "../memberships/entities/membership.enums";
 import { CreateLocationDto } from "./dto/create-location.dto";
@@ -31,6 +32,8 @@ export class LocationsService {
 
   async findAll(
     branchId?: string,
+    parentLocationId?: string,
+    kind?: string,
     pageIndex = 0,
     pageSize = 200,
   ): Promise<ListResponse<Location>> {
@@ -39,6 +42,14 @@ export class LocationsService {
       .orderBy("location.name", "ASC");
     if (branchId) {
       qb.andWhere("location.branchId = :branchId", { branchId });
+    }
+    if (parentLocationId) {
+      qb.andWhere("location.parentLocationId = :parentLocationId", {
+        parentLocationId,
+      });
+    }
+    if (kind) {
+      qb.andWhere("location.kind = :kind", { kind });
     }
     const safePage = Math.max(0, pageIndex);
     const safeSize = Math.min(500, Math.max(1, pageSize));
@@ -59,7 +70,8 @@ export class LocationsService {
   ): Promise<ListResponse<Location>> {
     const qb = this.locationRepo
       .createQueryBuilder("loc")
-      .where("loc.visibility = :vis", { vis: LocationVisibility.PUBLIC })
+      .where("loc.kind = :kind", { kind: LocationKind.CHILD })
+      .andWhere("loc.visibility = :vis", { vis: LocationVisibility.PUBLIC })
       .andWhere("loc.status = :status", { status: "active" })
       .orderBy("loc.name", "ASC");
     const safePage = Math.max(0, pageIndex);
@@ -76,32 +88,39 @@ export class LocationsService {
    * Locations the user may book: all active public + active private where they have an active membership.
    */
   async findBookableForUser(userId: string): Promise<Location[]> {
-    return this.locationRepo
-      .createQueryBuilder("loc")
-      .where("loc.status = :status", { status: "active" })
-      .andWhere(
-        new Brackets((qb) => {
-          qb.where("loc.visibility = :pub", {
-            pub: LocationVisibility.PUBLIC,
-          }).orWhere(
-            `loc.visibility = :priv AND EXISTS (
-              SELECT 1 FROM user_location_memberships m
-              WHERE m."locationId" = loc.id AND m."userId" = :userId AND m.status = :mstat
-            )`,
-            {
-              priv: LocationVisibility.PRIVATE,
-              userId,
-              mstat: MembershipStatus.ACTIVE,
-            },
-          );
-        }),
+    const memberships = await this.membershipRepo.find({
+      where: { userId },
+    });
+    const memberLocationIds = memberships
+      .filter((m) =>
+        [MembershipStatus.ACTIVE, MembershipStatus.GRACE, MembershipStatus.PENDING_PAYMENT].includes(
+          m.status,
+        ),
       )
-      .orderBy("loc.name", "ASC")
-      .getMany();
+      .map((m) => m.locationId);
+
+    const qb = this.locationRepo
+      .createQueryBuilder("loc")
+      .where("loc.kind = :kind", { kind: LocationKind.CHILD })
+      .andWhere("loc.status = :status", { status: "active" });
+
+    // If user has membership assignments, scope reserve list to those locations only.
+    // This supports multi-location tenancy where each user sees their own location data.
+    if (memberLocationIds.length > 0) {
+      qb.andWhere("loc.id IN (:...ids)", { ids: memberLocationIds });
+    } else {
+      // Fallback for unassigned users: public locations.
+      qb.andWhere("loc.visibility = :vis", { vis: LocationVisibility.PUBLIC });
+    }
+
+    return qb.orderBy("loc.name", "ASC").getMany();
   }
 
   async findOne(id: string) {
-    const location = await this.locationRepo.findOne({ where: { id } });
+    const location = await this.locationRepo.findOne({
+      where: { id },
+      relations: { parentLocation: true },
+    });
     if (!location) throw new NotFoundException("Location not found");
     return location;
   }

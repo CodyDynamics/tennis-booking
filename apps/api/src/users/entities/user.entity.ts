@@ -23,8 +23,8 @@ export class User {
   @Column({ type: "varchar", nullable: true })
   branchId: string | null;
 
-  @Column()
-  roleId: string;
+  @Column({ type: "uuid", nullable: true })
+  roleId: string | null;
 
   @Column()
   email: string;
@@ -34,6 +34,12 @@ export class User {
 
   @Column()
   fullName: string;
+
+  @Column({ type: "varchar", nullable: true })
+  firstName: string | null;
+
+  @Column({ type: "varchar", nullable: true })
+  lastName: string | null;
 
   /** Required for registered users; OAuth signups may use placeholder until profile completion */
   @Column({ type: "varchar" })
@@ -47,6 +53,9 @@ export class User {
 
   @Column({ default: "active" })
   status: string;
+
+  @Column({ type: "boolean", default: false })
+  mustChangePasswordOnFirstLogin: boolean;
 
   @Column({ type: "varchar", nullable: true })
   googleId: string | null;
@@ -70,9 +79,9 @@ export class User {
   @UpdateDateColumn()
   updatedAt: Date;
 
-  @ManyToOne(() => Role, { eager: true })
+  @ManyToOne(() => Role, { eager: true, nullable: true })
   @JoinColumn({ name: "roleId" })
-  role: Role;
+  role: Role | null;
 
   @ManyToOne(() => Court, { onDelete: "SET NULL", nullable: true })
   @JoinColumn({ name: "courtId" })

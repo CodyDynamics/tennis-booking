@@ -57,12 +57,22 @@ export default () => ({
     port: parseInt(process.env.REDIS_PORT || "6379", 10),
   },
   email: {
+    /** smtp | resend | cloud | none | unset (= auto: Resend if RESEND_API_KEY else SMTP if EMAIL_HOST else none) */
+    provider: process.env.MAIL_PROVIDER,
     host: process.env.EMAIL_HOST,
     port: parseInt(process.env.EMAIL_PORT || "587", 10),
     secure: process.env.EMAIL_SECURE === "true",
     user: process.env.EMAIL_USER,
     password: process.env.EMAIL_PASSWORD,
     from: process.env.EMAIL_FROM || "noreply@booking-tennis.com",
+    resendApiKey: process.env.RESEND_API_KEY,
+    googleClientId: process.env.GOOGLE_CLIENT_ID,
+    googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    googleRefreshToken: process.env.GOOGLE_REFRESH_TOKEN,
+    googleSenderEmail: process.env.GOOGLE_SENDER_EMAIL,
+    googleOAuthRedirectUri:
+      process.env.GOOGLE_OAUTH_REDIRECT_URI ||
+      "https://developers.google.com/oauthplayground",
   },
   otp: {
     /** Login OTP expiry in seconds (default 5 min) */

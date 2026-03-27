@@ -1,0 +1,57 @@
+import "reflect-metadata";
+import { DataSource } from "typeorm";
+import * as dotenv from "dotenv";
+import { User } from "../users/entities/user.entity";
+import { Role } from "../roles/entities/role.entity";
+import { PasswordResetToken } from "../auth/entities/password-reset-token.entity";
+import { RefreshToken } from "../auth/entities/refresh-token.entity";
+import { Branch } from "../branches/entities/branch.entity";
+import { Organization } from "../organizations/entities/organization.entity";
+import { Location } from "../locations/entities/location.entity";
+import { LocationBookingWindow } from "../locations/entities/location-booking-window.entity";
+import { Area } from "../areas/entities/area.entity";
+import { Court } from "../courts/entities/court.entity";
+import { UserLocationMembership } from "../memberships/entities/user-location-membership.entity";
+import { MembershipTransaction } from "../memberships/entities/membership-transaction.entity";
+import { Sport } from "../sports/entities/sport.entity";
+import { Coach } from "../coaches/entities/coach.entity";
+import { CourtBooking } from "../bookings/entities/court-booking.entity";
+import { CoachSession } from "../bookings/entities/coach-session.entity";
+import { BookingCommand } from "../bookings/entities/booking-command.entity";
+
+// TypeORM CLI does not load Nest ConfigModule, so load env files manually.
+dotenv.config({ path: ".env" });
+dotenv.config({ path: ".env.local", override: true });
+
+const port = parseInt(process.env.DB_PORT || "5432", 10);
+
+export default new DataSource({
+  type: "postgres",
+  host: process.env.DB_HOST || "localhost",
+  port: Number.isNaN(port) ? 5432 : port,
+  username: process.env.DB_USER || "postgres",
+  password: process.env.DB_PASS || "postgres",
+  database: process.env.DB_NAME || "booking_tennis",
+  entities: [
+    User,
+    Role,
+    PasswordResetToken,
+    RefreshToken,
+    Branch,
+    Organization,
+    Location,
+    LocationBookingWindow,
+    Area,
+    Court,
+    UserLocationMembership,
+    MembershipTransaction,
+    Sport,
+    Coach,
+    CourtBooking,
+    CoachSession,
+    BookingCommand,
+  ],
+  migrations: ["apps/api/src/database/migrations/*.ts"],
+  synchronize: false,
+  logging: process.env.DB_LOGGING === "true",
+});

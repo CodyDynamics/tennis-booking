@@ -1,10 +1,10 @@
 import { PartialType, OmitType } from "@nestjs/swagger";
 import { CreateUserDto } from "./create-user.dto";
-import { IsOptional, IsString, IsIn, MinLength } from "class-validator";
+import { IsOptional, IsString, IsIn, MinLength, IsUUID, ValidateIf } from "class-validator";
 import { ApiPropertyOptional } from "@nestjs/swagger";
 
 export class UpdateUserDto extends PartialType(
-  OmitType(CreateUserDto, ["password"] as const),
+  OmitType(CreateUserDto, ["password", "membershipLocationId"] as const),
 ) {
   @ApiPropertyOptional({ enum: ["active", "inactive"] })
   @IsOptional()
@@ -17,4 +17,14 @@ export class UpdateUserDto extends PartialType(
   @IsString()
   @MinLength(8)
   password?: string;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      "Location membership (same as Area→location). Omit to leave unchanged; null to clear.",
+  })
+  @IsOptional()
+  @ValidateIf((o) => o.membershipLocationId !== null && o.membershipLocationId !== undefined)
+  @IsUUID()
+  membershipLocationId?: string | null;
 }
