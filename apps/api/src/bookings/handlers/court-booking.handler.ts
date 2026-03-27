@@ -340,6 +340,202 @@ export class CourtBookingHandler implements IBookingHandler {
     };
   }
 
+  /**
+   * Reschedule an existing slot booking (same row): new time/slot, possibly new court.
+   * Only `COURT_ONLY` without coach — same constraints as slot create.
+   */
+  async rescheduleSlotBooking(
+    userId: string,
+    bookingId: string,
+    dto: {
+      locationId: string;
+      sport: string;
+      courtType: string;
+      bookingDate: string;
+      startTime: string;
+      endTime: string;
+      durationMinutes: number;
+    },
+  ): Promise<CreateBookingResult> {
+    const booking = await this.courtBookingRepo.findOne({
+      where: { id: bookingId },
+      relations: { court: { location: true } },
+    });
+    if (!booking) throw new NotFoundException("Booking not found");
+    if (booking.userId !== userId) {
+      throw new ForbiddenException("You can only edit your own booking");
+    }
+    if (booking.coachId) {
+      throw new BadRequestException(
+        "Bookings with a coach cannot be rescheduled here",
+      );
+    }
+    if (booking.bookingType !== CourtBookingType.COURT_ONLY) {
+      throw new BadRequestException("Only court-only bookings can be rescheduled here");
+    }
+    if (
+      booking.bookingStatus === CourtBookingStatus.CANCELLED ||
+      booking.bookingStatus === CourtBookingStatus.COMPLETED
+    ) {
+      throw new BadRequestException("This booking cannot be rescheduled");
+    }
+    if (booking.locationId !== dto.locationId) {
+      throw new BadRequestException("Cannot move a booking to another location");
+    }
+
+    const location = booking.court?.location;
+    if (!location) {
+      throw new BadRequestException("Court has no location");
+    }
+
+    const courtRepo = this.dataSource.getRepository(Court);
+    const courts = await courtRepo.find({
+      where: {
+        locationId: dto.locationId,
+        sport: dto.sport,
+        type: dto.courtType,
+        status: "active",
+      },
+      order: { name: "ASC" },
+    });
+    if (courts.length === 0) {
+      throw new ConflictException(
+        "No courts available for this location, sport, and court type.",
+      );
+    }
+
+    const shuffled = [...courts].sort(() => Math.random() - 0.5);
+    let assignedCourtId: string | null = null;
+    for (const c of shuffled) {
+      const free = await this.isCourtAvailable(
+        c.id,
+        dto.bookingDate,
+        dto.startTime,
+        dto.endTime,
+        bookingId,
+      );
+      if (free) {
+        assignedCourtId = c.id;
+        break;
+      }
+    }
+    if (!assignedCourtId) {
+      throw new ConflictException(
+        "All courts are taken for this slot. Please pick another time.",
+      );
+    }
+
+    const courtPayload = await this.courtsService.findOne(assignedCourtId);
+    const { coaches: _coaches, pricePerHour: _legacy, ...court } = courtPayload;
+    if (court.status !== "active") {
+      throw new BadRequestException("Court is not available for booking");
+    }
+    const loc = court.location;
+    if (!loc) throw new BadRequestException("Court has no location");
+
+    const startMin = this.parseTimeToMinutes(dto.startTime);
+    const endMin = this.parseTimeToMinutes(dto.endTime);
+    if (endMin <= startMin) {
+      throw new BadRequestException("endTime must be after startTime");
+    }
+    const durationMinutes =
+      dto.durationMinutes ?? endMin - startMin;
+
+    const dateStr = dto.bookingDate.slice(0, 10);
+    const todayYmd = ymdTodayInIanaTimeZone(loc.timezone);
+    if (dateStr < todayYmd) {
+      throw new BadRequestException("Cannot book a past date at this venue");
+    }
+    if (dateStr === todayYmd) {
+      const nowMin = wallClockMinutesNowInTimeZone(loc.timezone);
+      if (startMin < nowMin) {
+        throw new BadRequestException(
+          "This start time has already passed at the venue",
+        );
+      }
+    }
+
+    let membership: UserLocationMembership | null = null;
+    if (loc.visibility === LocationVisibility.PRIVATE) {
+      membership = await this.membershipRepo.findOne({
+        where: {
+          userId,
+          locationId: loc.id,
+          status: MembershipStatus.ACTIVE,
+        },
+      });
+      if (!membership) {
+        throw new ForbiddenException(
+          "An active membership is required to book courts at this private location",
+        );
+      }
+    }
+
+    const pricingTier =
+      loc.visibility === LocationVisibility.PRIVATE
+        ? CourtPricingTier.MEMBER
+        : CourtPricingTier.PUBLIC;
+
+    const publicHourly = parseFloat(court.pricePerHourPublic);
+    let courtHourly = publicHourly;
+    let discountAmountNum: number | null = null;
+    const unitSnapshot = publicHourly.toFixed(2);
+
+    if (pricingTier === CourtPricingTier.MEMBER) {
+      courtHourly = parseHourlyMemberRate(court, loc);
+      const hours = durationMinutes / 60;
+      discountAmountNum = Math.max(
+        0,
+        publicHourly * hours - courtHourly * hours,
+      );
+    }
+
+    const totalPrice = courtHourly * (durationMinutes / 60);
+
+    const { start: bookingStartAt, end: bookingEndAt } =
+      await this.wallRangeToUtc(
+        dto.bookingDate,
+        dto.startTime,
+        dto.endTime,
+        loc.timezone,
+      );
+
+    booking.branchId = booking.branchId ?? court.location?.branchId ?? null;
+    booking.locationId = loc.id;
+    booking.sport = dto.sport;
+    booking.courtType = dto.courtType;
+    booking.locationBookingWindowId = null;
+    booking.pricingTier = pricingTier;
+    booking.unitPricePerHourSnapshot = unitSnapshot;
+    booking.discountAmount =
+      discountAmountNum != null ? discountAmountNum.toFixed(2) : null;
+    booking.userLocationMembershipId = membership?.id ?? null;
+    booking.bookingStartAt = bookingStartAt;
+    booking.bookingEndAt = bookingEndAt;
+    booking.courtId = assignedCourtId;
+    booking.bookingDate = new Date(dto.bookingDate);
+    booking.startTime = dto.startTime;
+    booking.endTime = dto.endTime;
+    booking.durationMinutes = durationMinutes;
+    booking.totalPrice = String(totalPrice.toFixed(2));
+
+    try {
+      const saved = await this.courtBookingRepo.save(booking);
+      return {
+        id: saved.id,
+        kind: "court",
+        summary: `Court ${court.name} on ${dto.bookingDate} ${dto.startTime}-${dto.endTime}`,
+      };
+    } catch (e) {
+      if (this.isOverlapConstraintViolation(e)) {
+        throw new ConflictException(
+          "That slot was just taken. Please pick another time or court.",
+        );
+      }
+      throw e;
+    }
+  }
+
   async cancel(bookingId: string, userId: string): Promise<void> {
     const booking = await this.courtBookingRepo.findOne({
       where: { id: bookingId },

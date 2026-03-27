@@ -35,6 +35,7 @@ import { RolesModule } from "./roles/roles.module";
 import { OrganizationsModule } from "./organizations/organizations.module";
 import { SportsModule } from "./sports/sports.module";
 import { RedisModule } from "./redis/redis.module";
+import { AdminModule } from "./admin/admin.module";
 
 @Module({
   imports: [
@@ -117,6 +118,7 @@ import { RedisModule } from "./redis/redis.module";
     RolesModule,
     OrganizationsModule,
     SportsModule,
+    AdminModule,
   ],
   controllers: [],
   providers: [],

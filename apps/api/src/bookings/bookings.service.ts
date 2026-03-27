@@ -100,6 +100,7 @@ export class BookingsService {
       courtType: q.courtType,
       bookingDate: q.bookingDate,
       durationMinutes: q.durationMinutes,
+      excludeBookingId: q.excludeBookingId,
     });
   }
 
@@ -155,6 +156,25 @@ export class BookingsService {
       startTime: dto.startTime,
       endTime: dto.endTime,
       coachId: dto.coachId,
+      durationMinutes: duration,
+    });
+  }
+
+  /** Update existing slot booking row (reschedule) — same payload shape as create slot. */
+  async updateSlotBooking(
+    userId: string,
+    bookingId: string,
+    dto: CreateCourtSlotBookingDto,
+  ) {
+    const duration =
+      dto.durationMinutes ?? this.getDurationMinutes(dto.startTime, dto.endTime);
+    return this.courtBookingHandler.rescheduleSlotBooking(userId, bookingId, {
+      locationId: dto.locationId,
+      sport: dto.sport,
+      courtType: dto.courtType,
+      bookingDate: dto.bookingDate,
+      startTime: dto.startTime,
+      endTime: dto.endTime,
       durationMinutes: duration,
     });
   }

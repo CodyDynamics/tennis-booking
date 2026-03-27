@@ -361,8 +361,18 @@ export class CourtWizardAvailabilityService {
     courtType: string;
     bookingDate: string;
     durationMinutes: number;
+    /** Omit this booking when counting busy courts (reschedule UI) */
+    excludeBookingId?: string;
   }): Promise<CourtSlotAvailabilityResponse> {
-    const { userId, locationId, sport, courtType, bookingDate, durationMinutes } = params;
+    const {
+      userId,
+      locationId,
+      sport,
+      courtType,
+      bookingDate,
+      durationMinutes,
+      excludeBookingId,
+    } = params;
 
     const location = await this.locationRepo.findOne({ where: { id: locationId } });
     if (!location) throw new NotFoundException("Location not found");
@@ -446,6 +456,7 @@ export class CourtWizardAvailabilityService {
     for (const id of courtIds) busyByCourt.set(id, []);
 
     for (const b of bookings) {
+      if (excludeBookingId && b.id === excludeBookingId) continue;
       busyByCourt.get(b.courtId)?.push({ start: timeToMinutes(b.startTime), end: timeToMinutes(b.endTime) });
     }
     for (const s of sessions) {

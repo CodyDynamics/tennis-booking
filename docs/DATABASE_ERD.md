@@ -37,6 +37,31 @@ Members at a **private** location receive **court booking discounts** (configura
 7. Second API call (or same response) returns a **dropdown of courts** that still have **at least one free slot** matching the selection for that **calendar date**.
 8. User picks court + concrete slot → **confirm booking** (see §4 concurrency).
 
+### 1.4 Implemented flow: slot grid + auto court (location courts page)
+
+The **live** customer UI at `/locations/:locationId/courts` uses a **slot-first** variant of the above:
+
+1. **Sport** and **indoor/outdoor** — same alignment with `courts.sport` / `courts.type`.
+2. **Duration** — pills (`30` / `60` / `90` minutes) matching policy.
+3. **Date** — single-day picker; “today” and cutoffs use `locations.timezone` (IANA).
+4. **Slots** — `GET /bookings/court/wizard/slots` returns aggregated intervals with `availableCount` / `totalCount` across all matching courts (no per-court names in the grid).
+5. **Soft holds** — WebSocket room per location; clients signal holds on an interval so capacity updates for overlapping durations.
+6. **Book** — `POST /bookings/court/slot` picks a **random free court** for that interval; `court_bookings` rows store denormalized `locationId`, `sport`, `courtType` for lists and analytics.
+7. **Reschedule (same row)** — `PATCH /bookings/court/slot/:bookingId` with the same body shape as (6) updates that booking’s time/court/pricing; only `COURT_ONLY` without coach. Slot grid can pass `excludeBookingId` on `GET /bookings/court/wizard/slots` so the user’s current booking does not count as “busy” while choosing a new slot.
+
+**Layout:** full-width page with **booking controls on the left** and a **“Hi {name}, your bookings”** sidebar on the right. Data comes from `GET /bookings/my` (scoped to the user), filtered client-side by `locationId`. **Cancel** uses `DELETE /bookings/court/:id`. **Change time** pre-fills the left form and switches the primary action to **Update now**, calling **PATCH** so no second row is inserted. **Success** is shown with a **toast** (no redirect to booking history).
+
+### 1.5 Admin analytics dashboard (read model)
+
+The **admin home** at `/admin` shows **operations analytics** (KPI cards + charts). Data sources:
+
+| Mode | Source |
+|------|--------|
+| **Real** | `GET /admin/dashboard/metrics` (JWT + role `admin` \| `super_admin`). Aggregates from `users`, `courts`, `locations`, `court_bookings`, `coach_sessions`, `coaches`. Includes **last 14 days** daily booking counts, **daily revenue** (sum of `court_bookings.totalPrice`), **14-day revenue total**, and **bookings by sport**. |
+| **Mockup** | Static JSON in the frontend for demos / design reviews when DB is empty or offline. |
+
+This endpoint is a **read-only aggregate**; it does not introduce new tables. Future admin booking lists can follow §6 (`GET /admin/bookings`).
+
 ---
 
 ## 2. Summary counts (target)
@@ -141,7 +166,7 @@ Future perks (guest passes, pro shop discount codes) can hang off `user_location
 |----------|--------|
 | Is `GET .../bookings/my` enough for admin? | **No** for admin use cases. That route is scoped to the **authenticated user** (“my”). |
 | Do you need a separate **`orders` table?** | **Not required** for court-only products. Each **`court_bookings`** row **is** an order line / booking record. **`coach_sessions`** is analogous for coach products. |
-| What should admin use? | New or extended **admin** endpoints, e.g. `GET /admin/bookings` with filters (`userId`, `locationId`, `dateFrom`, `dateTo`, `status`) and **RBAC** (e.g. `super_admin`, `location_admin`). Optionally a **read model** view joining user + court + location for support screens. |
+| What should admin use? | **Implemented:** `GET /admin/dashboard/metrics` for dashboard KPIs/charts (see §1.5). **Future:** `GET /admin/bookings` with filters (`userId`, `locationId`, `dateFrom`, `dateTo`, `status`) and **RBAC** (e.g. `super_admin`, `location_admin`). Optionally a **read model** view joining user + court + location for support screens. |
 | When **would** you add `orders`? | If you need **one checkout** with **multiple lines** (court + merch + coach) and a **single payment intent**, or unified **order status** across line types. Then `orders` + `order_lines` referencing `court_bookings` / other line types. |
 
 ---

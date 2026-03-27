@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   Param,
   Query,
@@ -95,6 +96,22 @@ export class BookingsController {
       user.organizationId,
       user.branchId,
     );
+  }
+
+  @Patch("court/slot/:bookingId")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth("JWT")
+  @ApiOperation({ summary: "Reschedule slot booking (updates same row, new time/court)" })
+  @ApiParam({ name: "bookingId", description: "Existing court_bookings.id" })
+  @ApiBody({ type: CreateCourtSlotBookingDto })
+  @ApiResponse({ status: 200, description: "Booking updated" })
+  @ApiResponse({ status: 409, description: "Slot no longer available" })
+  updateSlotBooking(
+    @Param("bookingId") bookingId: string,
+    @Body() dto: CreateCourtSlotBookingDto,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.bookingsService.updateSlotBooking(user.id, bookingId, dto);
   }
 
   @Post("court")

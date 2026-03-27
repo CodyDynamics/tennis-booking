@@ -1,8 +1,9 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   IsDateString,
   IsIn,
   IsInt,
+  IsOptional,
   IsUUID,
   Min,
 } from "class-validator";
@@ -49,4 +50,12 @@ export class CourtSlotQueryDto extends CourtWizardWindowsQueryDto {
   @IsInt()
   @Min(15)
   durationMinutes: number;
+
+  @ApiPropertyOptional({
+    description:
+      "When rescheduling, exclude this booking from busy counts so the current slot shows as available",
+  })
+  @IsOptional()
+  @IsUUID()
+  excludeBookingId?: string;
 }
