@@ -12,14 +12,16 @@ export class PermissionsGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const required = this.reflector.getAllAndOverride<string>(REQUIRE_PERMISSION_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
+    const required = this.reflector.getAllAndOverride<string>(
+      REQUIRE_PERMISSION_KEY,
+      [context.getHandler(), context.getClass()],
+    );
     if (!required) return true;
 
     const request = context.switchToHttp().getRequest();
-    const user = request.user as { role?: string; permissions?: string[] } | undefined;
+    const user = request.user as
+      | { role?: string; permissions?: string[] }
+      | undefined;
     if (!user) throw new ForbiddenException("Not authenticated");
 
     if (user.role === "super_admin") return true;
