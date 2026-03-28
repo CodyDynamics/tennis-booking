@@ -31,6 +31,13 @@ const DEFAULT_ROLES = [
     permissions: "",
   },
   {
+    name: "super_user",
+    description:
+      "Location operator: users, memberships, courts for assigned location(s) only",
+    permissions:
+      "dashboard:view,memberships:view,users:view,users:create,users:update,users:delete,courts:view,courts:create,courts:update,courts:delete,bookings:view,areas:view,areas:create,areas:update,areas:delete",
+  },
+  {
     name: "admin",
     description: "Administrator (permissions assigned by super_admin)",
   },
@@ -136,12 +143,12 @@ export class SeedService implements OnModuleInit {
   private async seedRoles() {
     const allPermissions = getAllPermissionCodes();
     for (const r of DEFAULT_ROLES) {
+      const permissions =
+        r.name === "super_admin"
+          ? allPermissions.join(",")
+          : ((r as { permissions?: string }).permissions ?? "");
       const existing = await this.roleRepo.findOne({ where: { name: r.name } });
       if (!existing) {
-        const permissions =
-          r.name === "super_admin"
-            ? allPermissions.join(",")
-            : ((r as { permissions?: string }).permissions ?? "");
         await this.roleRepo.save(
           this.roleRepo.create({
             name: r.name,
@@ -150,6 +157,17 @@ export class SeedService implements OnModuleInit {
           }),
         );
         console.log(`[SeedService] Created role: ${r.name}`);
+      } else if (r.name === "super_user" && permissions) {
+        const existingStr = String(existing.permissions ?? "").trim();
+        const needsSeed =
+          !existingStr ||
+          !existingStr.includes("areas:view") ||
+          !existingStr.includes("dashboard:view") ||
+          !existingStr.includes("memberships:view");
+        if (needsSeed) {
+          await this.roleRepo.update(existing.id, { permissions });
+          console.log(`[SeedService] Updated super_user role permissions`);
+        }
       }
     }
   }

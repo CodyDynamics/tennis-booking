@@ -32,7 +32,7 @@ export class AreasController {
 
   @Post()
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @RequirePermission("locations:update")
+  @RequirePermission("areas:create")
   @ApiBearerAuth("JWT")
   @ApiOperation({ summary: "Create area under location child" })
   create(@Body() dto: CreateAreaDto) {
@@ -63,7 +63,7 @@ export class AreasController {
 
   @Patch(":id")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @RequirePermission("locations:update")
+  @RequirePermission("areas:update")
   @ApiBearerAuth("JWT")
   update(@Param("id") id: string, @Body() dto: UpdateAreaDto) {
     return this.areasService.update(id, dto);
@@ -71,7 +71,7 @@ export class AreasController {
 
   @Delete(":id")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
-  @RequirePermission("locations:update")
+  @RequirePermission("areas:delete")
   @ApiBearerAuth("JWT")
   remove(@Param("id") id: string) {
     return this.areasService.remove(id);

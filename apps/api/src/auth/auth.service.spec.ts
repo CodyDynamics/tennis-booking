@@ -160,13 +160,15 @@ describe("AuthService", () => {
         ...mockUser,
         id: "new-id",
         email: registerDto.email,
+        roleId: null,
       });
       userRepo.findOne.mockResolvedValue({
         ...mockUser,
         id: "new-id",
         email: registerDto.email,
         fullName: registerDto.fullName,
-        role: mockRole,
+        roleId: null,
+        role: null,
       });
 
       const result = await service.register(registerDto);

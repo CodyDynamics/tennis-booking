@@ -6,9 +6,13 @@ import { User } from "./entities/user.entity";
 import { RolesModule } from "../roles/roles.module";
 import { UserLocationMembership } from "../memberships/entities/user-location-membership.entity";
 import { Location } from "../locations/entities/location.entity";
+import { Area } from "../areas/entities/area.entity";
 
 @Module({
-  imports: [RolesModule, TypeOrmModule.forFeature([User, UserLocationMembership, Location])],
+  imports: [
+    RolesModule,
+    TypeOrmModule.forFeature([User, UserLocationMembership, Location, Area]),
+  ],
   controllers: [UsersController],
   providers: [UsersService],
   exports: [TypeOrmModule],

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Brackets, Repository } from "typeorm";
+import { Brackets, In, Repository } from "typeorm";
 import { buildListResponse, ListResponse } from "@app/common";
 import { Location } from "./entities/location.entity";
 import { LocationKind } from "./entities/location-kind.enum";
@@ -9,6 +9,7 @@ import { MembershipStatus } from "../memberships/entities/membership.enums";
 import { CreateLocationDto } from "./dto/create-location.dto";
 import { UpdateLocationDto } from "./dto/update-location.dto";
 import { UserLocationMembership } from "../memberships/entities/user-location-membership.entity";
+import { User } from "../users/entities/user.entity";
 
 export interface LocationMembershipStatusDto {
   locationId: string;
@@ -24,6 +25,8 @@ export class LocationsService {
     private locationRepo: Repository<Location>,
     @InjectRepository(UserLocationMembership)
     private membershipRepo: Repository<UserLocationMembership>,
+    @InjectRepository(User)
+    private userRepo: Repository<User>,
   ) {}
 
   async create(dto: CreateLocationDto) {
@@ -85,9 +88,22 @@ export class LocationsService {
   }
 
   /**
-   * Locations the user may book: all active public + active private where they have an active membership.
+   * - super_admin: all active child locations (public + private).
+   * - User with eligible membership: those locations only.
+   * - No membership: none (must be assigned before booking).
    */
   async findBookableForUser(userId: string): Promise<Location[]> {
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      relations: ["role"],
+    });
+    if (user?.role?.name === "super_admin") {
+      return this.locationRepo.find({
+        where: { kind: LocationKind.CHILD, status: "active" },
+        order: { name: "ASC" },
+      });
+    }
+
     const memberships = await this.membershipRepo.find({
       where: { userId },
     });
@@ -99,21 +115,18 @@ export class LocationsService {
       )
       .map((m) => m.locationId);
 
-    const qb = this.locationRepo
-      .createQueryBuilder("loc")
-      .where("loc.kind = :kind", { kind: LocationKind.CHILD })
-      .andWhere("loc.status = :status", { status: "active" });
-
-    // If user has membership assignments, scope reserve list to those locations only.
-    // This supports multi-location tenancy where each user sees their own location data.
-    if (memberLocationIds.length > 0) {
-      qb.andWhere("loc.id IN (:...ids)", { ids: memberLocationIds });
-    } else {
-      // Fallback for unassigned users: public locations.
-      qb.andWhere("loc.visibility = :vis", { vis: LocationVisibility.PUBLIC });
+    if (memberLocationIds.length === 0) {
+      return [];
     }
 
-    return qb.orderBy("loc.name", "ASC").getMany();
+    return this.locationRepo.find({
+      where: {
+        id: In(memberLocationIds),
+        kind: LocationKind.CHILD,
+        status: "active",
+      },
+      order: { name: "ASC" },
+    });
   }
 
   async findOne(id: string) {
