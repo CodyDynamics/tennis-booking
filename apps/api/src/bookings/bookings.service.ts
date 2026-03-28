@@ -273,6 +273,7 @@ export class BookingsService {
   async cancelBooking(bookingId: string, kind: BookingKind, userId: string) {
     if (kind === "court") {
       await this.courtBookingHandler.cancel(bookingId, userId);
+      void this.bookingMailService.sendBookingCancellation(bookingId);
     } else {
       await this.coachSessionHandler.cancel(bookingId, userId);
     }

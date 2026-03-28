@@ -289,6 +289,29 @@ export class AuthService {
     return result;
   }
 
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ) {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user?.passwordHash) {
+      throw new BadRequestException(
+        "This account has no password set; use Google sign-in or reset password.",
+      );
+    }
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!valid) {
+      throw new UnauthorizedException("Current password is incorrect");
+    }
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await this.userRepo.update(userId, {
+      passwordHash,
+      mustChangePasswordOnFirstLogin: false,
+    });
+    return { message: "Password updated" };
+  }
+
   async login(loginDto: LoginDto) {
     const user = await this.validateUser(loginDto.email, loginDto.password);
     if (!user) {
@@ -372,6 +395,7 @@ export class AuthService {
         email: user.email,
         fullName: user.fullName,
         role: user.role?.name,
+        mustChangePasswordOnFirstLogin: user.mustChangePasswordOnFirstLogin,
       },
       ...tokens,
     };
@@ -420,7 +444,10 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    await this.userRepo.update(resetToken.userId, { passwordHash });
+    await this.userRepo.update(resetToken.userId, {
+      passwordHash,
+      mustChangePasswordOnFirstLogin: false,
+    });
     await this.resetTokenRepo.update(resetToken.id, { used: true });
 
     return { message: "Password reset successfully" };
@@ -479,6 +506,7 @@ export class AuthService {
         email: user.email,
         fullName: user.fullName,
         role: user.role?.name,
+        mustChangePasswordOnFirstLogin: user.mustChangePasswordOnFirstLogin,
       },
       ...tokens,
     };
@@ -523,6 +551,7 @@ export class AuthService {
         email: user.email,
         fullName: user.fullName,
         role: user.role?.name,
+        mustChangePasswordOnFirstLogin: user.mustChangePasswordOnFirstLogin,
       },
     };
   }

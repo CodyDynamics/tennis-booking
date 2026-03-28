@@ -25,7 +25,9 @@ import {
   RequestLoginOtpDto,
   VerifyLoginOtpDto,
   VerifyRegisterOtpDto,
+  ChangePasswordDto,
 } from "./dto";
+import { JwtAuthGuard, CurrentUser } from "@app/common";
 import { AuthResponseDto } from "./dto/auth-response.dto";
 
 @ApiTags("Auth")
@@ -186,6 +188,26 @@ export class AuthController {
       dto.rememberMe,
     );
     return { user: result.user, accessToken: result.accessToken };
+  }
+
+  @Post("change-password")
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Change password while logged in (clears must-change-password flag)",
+  })
+  @ApiBody({ type: ChangePasswordDto })
+  @ApiResponse({ status: 200, description: "Password updated" })
+  @ApiResponse({ status: 401, description: "Wrong current password" })
+  async changePassword(
+    @CurrentUser() user: { id: string },
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(
+      user.id,
+      dto.currentPassword,
+      dto.newPassword,
+    );
   }
 
   @Post("login")

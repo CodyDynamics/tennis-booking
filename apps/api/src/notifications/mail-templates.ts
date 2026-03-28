@@ -4,6 +4,7 @@ import { escapeHtml, renderMailLayout } from "./mail-layout";
 export const MailTemplateId = {
   BOOKING_CONFIRMATION: "booking_confirmation",
   BOOKING_REMINDER_30M: "booking_reminder_30m",
+  BOOKING_CANCELLED: "booking_cancelled",
 } as const;
 
 export type MailTemplateIdType =
@@ -14,9 +15,8 @@ export interface BookingConfirmationTemplateInput {
   userDisplayName: string;
   locationName: string;
   courtName: string;
-  /** Pre-formatted local range at venue, e.g. "Thứ Bảy, 28 tháng 3, 2025, 08:00 – 09:00" */
-  whenLocalLabel: string;
-  timezoneLabel: string;
+  /** Local time range at venue, e.g. "19:30 - 21:00" */
+  dateTimeRangeLabel: string;
   /** Deep link to courts for this location (and area when known). Uses FRONTEND_URL on the server. */
   venueCourtsUrl: string;
   /** Optional link to booking history on the same frontend. */
@@ -30,8 +30,17 @@ export interface BookingReminderTemplateInput {
   userDisplayName: string;
   locationName: string;
   courtName: string;
-  whenLocalLabel: string;
-  timezoneLabel: string;
+  dateTimeRangeLabel: string;
+  venueCourtsUrl: string;
+  bookingHistoryUrl?: string;
+  footerHtml?: string;
+}
+
+export interface BookingCancelledTemplateInput {
+  userDisplayName: string;
+  locationName: string;
+  courtName: string;
+  dateTimeRangeLabel: string;
   venueCourtsUrl: string;
   bookingHistoryUrl?: string;
   footerHtml?: string;
@@ -55,7 +64,9 @@ function leadConfirmation(variant: "created" | "rescheduled"): string {
     : "Thanks for booking with us. Here are your details:";
 }
 
-export function renderBookingConfirmationEmail(input: BookingConfirmationTemplateInput): {
+export function renderBookingConfirmationEmail(
+  input: BookingConfirmationTemplateInput,
+): {
   templateId: typeof MailTemplateId.BOOKING_CONFIRMATION;
   subject: string;
   html: string;
@@ -68,7 +79,7 @@ export function renderBookingConfirmationEmail(input: BookingConfirmationTemplat
     <ul style="margin:0 0 16px;padding-left:20px;color:#334155;">
       <li><strong>Venue:</strong> ${escapeHtml(input.locationName)}</li>
       <li><strong>Court:</strong> ${escapeHtml(input.courtName)}</li>
-      <li><strong>When (${escapeHtml(input.timezoneLabel)}):</strong> ${escapeHtml(input.whenLocalLabel)}</li>
+      <li><strong>Date/Time:</strong> ${escapeHtml(input.dateTimeRangeLabel)}</li>
     </ul>
     ${extra}
     <p style="margin:16px 0 0;">
@@ -77,7 +88,7 @@ export function renderBookingConfirmationEmail(input: BookingConfirmationTemplat
     <p style="margin:16px 0 0;font-size:14px;color:#64748b;">If the button does not work, copy this link:<br /><span style="word-break:break-all;">${escapeHtml(input.venueCourtsUrl)}</span></p>
     ${
       input.bookingHistoryUrl
-        ? `<p style="margin:12px 0 0;font-size:14px;color:#64748b;"><a href="${escapeHtml(input.bookingHistoryUrl)}" style="color:#0f766e;">View all my bookings</a></p>`
+        ? `<p style="margin:12px 0 0;font-size:14px;color:#64748b;"><a href="${escapeHtml(input.bookingHistoryUrl)}" style="color:#0f766e;"></a></p>`
         : ""
     }
   `;
@@ -92,7 +103,44 @@ export function renderBookingConfirmationEmail(input: BookingConfirmationTemplat
   };
 }
 
-export function renderBookingReminder30mEmail(input: BookingReminderTemplateInput): {
+export function renderBookingCancelledEmail(
+  input: BookingCancelledTemplateInput,
+): {
+  templateId: typeof MailTemplateId.BOOKING_CANCELLED;
+  subject: string;
+  html: string;
+} {
+  const bodyHtml = `
+    <p style="margin:0 0 12px;">Hi ${escapeHtml(input.userDisplayName)},</p>
+    <p style="margin:0 0 12px;">Your court booking has been <strong>cancelled</strong>.</p>
+    <ul style="margin:0 0 16px;padding-left:20px;color:#334155;">
+      <li><strong>Venue:</strong> ${escapeHtml(input.locationName)}</li>
+      <li><strong>Court:</strong> ${escapeHtml(input.courtName)}</li>
+      <li><strong>Date/Time:</strong> ${escapeHtml(input.dateTimeRangeLabel)}</li>
+    </ul>
+    <p style="margin:16px 0 0;">
+      <a href="${escapeHtml(input.venueCourtsUrl)}" style="display:inline-block;background:#0f766e;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600;">Book another time</a>
+    </p>
+    ${
+      input.bookingHistoryUrl
+        ? `<p style="margin:12px 0 0;font-size:14px;color:#64748b;"><a href="${escapeHtml(input.bookingHistoryUrl)}" style="color:#0f766e;"></a></p>`
+        : ""
+    }
+  `;
+  return {
+    templateId: MailTemplateId.BOOKING_CANCELLED,
+    subject: "Your court booking was cancelled",
+    html: renderMailLayout({
+      title: "Booking cancelled",
+      bodyHtml,
+      footerHtml: input.footerHtml,
+    }),
+  };
+}
+
+export function renderBookingReminder30mEmail(
+  input: BookingReminderTemplateInput,
+): {
   templateId: typeof MailTemplateId.BOOKING_REMINDER_30M;
   subject: string;
   html: string;
@@ -103,14 +151,14 @@ export function renderBookingReminder30mEmail(input: BookingReminderTemplateInpu
     <ul style="margin:0 0 16px;padding-left:20px;color:#334155;">
       <li><strong>Venue:</strong> ${escapeHtml(input.locationName)}</li>
       <li><strong>Court:</strong> ${escapeHtml(input.courtName)}</li>
-      <li><strong>When (${escapeHtml(input.timezoneLabel)}):</strong> ${escapeHtml(input.whenLocalLabel)}</li>
+      <li><strong>Date/Time:</strong> ${escapeHtml(input.dateTimeRangeLabel)}</li>
     </ul>
     <p style="margin:16px 0 0;">
       <a href="${escapeHtml(input.venueCourtsUrl)}" style="display:inline-block;background:#0f766e;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600;">Open this venue &amp; courts</a>
     </p>
     ${
       input.bookingHistoryUrl
-        ? `<p style="margin:12px 0 0;font-size:14px;color:#64748b;"><a href="${escapeHtml(input.bookingHistoryUrl)}" style="color:#0f766e;">View all my bookings</a></p>`
+        ? `<p style="margin:12px 0 0;font-size:14px;color:#64748b;"><a href="${escapeHtml(input.bookingHistoryUrl)}" style="color:#0f766e;"></a></p>`
         : ""
     }
   `;
@@ -125,7 +173,24 @@ export function renderBookingReminder30mEmail(input: BookingReminderTemplateInpu
   };
 }
 
-/** Format UTC instants in the venue IANA timezone for email copy. */
+/** Local start–end times at venue (24h), e.g. `19:30 - 21:00`. */
+export function formatBookingTimeRangeShort(
+  startAt: Date,
+  endAt: Date,
+  ianaTimeZone: string,
+): string {
+  const timeOpts: Intl.DateTimeFormatOptions = {
+    timeZone: ianaTimeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  };
+  const start = new Intl.DateTimeFormat("en-GB", timeOpts).format(startAt);
+  const end = new Intl.DateTimeFormat("en-GB", timeOpts).format(endAt);
+  return `${start} - ${end}`;
+}
+
+/** Long-form local range (legacy / other use). */
 export function formatBookingWindowLocal(
   startAt: Date,
   endAt: Date,

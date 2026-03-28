@@ -8,8 +8,9 @@ import {
 } from "../bookings/entities/court-booking.entity";
 import { MailSenderService } from "./mail-sender.service";
 import {
-  formatBookingWindowLocal,
+  formatBookingTimeRangeShort,
   renderBookingConfirmationEmail,
+  renderBookingCancelledEmail,
   renderBookingReminder30mEmail,
 } from "./mail-templates";
 
@@ -80,14 +81,13 @@ export class BookingMailService {
         return;
       }
       const tz = booking.location?.timezone || "UTC";
-      const whenLocal = formatBookingWindowLocal(startAt, endAt, tz);
+      const dateTimeRangeLabel = formatBookingTimeRangeShort(startAt, endAt, tz);
       const { subject, html } = renderBookingConfirmationEmail({
         variant,
         userDisplayName: booking.user.fullName || "there",
         locationName: booking.location?.name || "Venue",
         courtName: booking.court?.name || "Court",
-        whenLocalLabel: whenLocal,
-        timezoneLabel: tz,
+        dateTimeRangeLabel,
         venueCourtsUrl: this.venueCourtsUrl(booking),
         bookingHistoryUrl: this.bookingHistoryUrl(),
       });
@@ -101,6 +101,47 @@ export class BookingMailService {
     }
   }
 
+  /** After status is set to cancelled; fire-and-forget from cancel handler. */
+  async sendBookingCancellation(bookingId: string): Promise<void> {
+    try {
+      const booking = await this.courtBookingRepo.findOne({
+        where: { id: bookingId },
+        relations: { user: true, court: true, location: true },
+      });
+      if (!booking?.user?.email) {
+        this.logger.warn(`No user email for cancelled booking ${bookingId}; skip mail`);
+        return;
+      }
+      if (booking.bookingStatus !== CourtBookingStatus.CANCELLED) {
+        this.logger.warn(`Booking ${bookingId} not cancelled; skip cancellation mail`);
+        return;
+      }
+      const startAt = booking.bookingStartAt;
+      const endAt = booking.bookingEndAt;
+      if (!startAt || !endAt) {
+        this.logger.warn(`Cancelled booking ${bookingId} missing UTC range; skip mail`);
+        return;
+      }
+      const tz = booking.location?.timezone || "UTC";
+      const dateTimeRangeLabel = formatBookingTimeRangeShort(startAt, endAt, tz);
+      const { subject, html } = renderBookingCancelledEmail({
+        userDisplayName: booking.user.fullName || "there",
+        locationName: booking.location?.name || "Venue",
+        courtName: booking.court?.name || "Court",
+        dateTimeRangeLabel,
+        venueCourtsUrl: this.venueCourtsUrl(booking),
+        bookingHistoryUrl: this.bookingHistoryUrl(),
+      });
+      await this.mailSender.sendHtml({
+        to: booking.user.email,
+        subject,
+        html,
+      });
+    } catch (e) {
+      this.logger.error(`sendBookingCancellation failed for ${bookingId}`, e);
+    }
+  }
+
   async sendBookingReminder30m(booking: CourtBooking): Promise<boolean> {
     const user = booking.user;
     if (!user?.email) {
@@ -111,13 +152,12 @@ export class BookingMailService {
     const endAt = booking.bookingEndAt;
     if (!startAt || !endAt) return false;
     const tz = booking.location?.timezone || "UTC";
-    const whenLocal = formatBookingWindowLocal(startAt, endAt, tz);
+    const dateTimeRangeLabel = formatBookingTimeRangeShort(startAt, endAt, tz);
     const { subject, html } = renderBookingReminder30mEmail({
       userDisplayName: user.fullName || "there",
       locationName: booking.location?.name || "Venue",
       courtName: booking.court?.name || "Court",
-      whenLocalLabel: whenLocal,
-      timezoneLabel: tz,
+      dateTimeRangeLabel,
       venueCourtsUrl: this.venueCourtsUrl(booking),
       bookingHistoryUrl: this.bookingHistoryUrl(),
     });

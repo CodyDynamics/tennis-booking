@@ -324,7 +324,9 @@ export class SeedService implements OnModuleInit {
             visibility: "private",
           }),
         );
-        console.log("[SeedService] Created super admin: superadmin@gmail.com / SuperAdmin123!");
+        console.log(
+          "[SeedService] Created super admin: superadmin@gmail.com / SuperAdmin123!",
+        );
       }
     }
   }
@@ -726,7 +728,9 @@ export class SeedService implements OnModuleInit {
       },
     });
     if (!targetLocations.length) {
-      console.log("[SeedService] seedLocationBookingWindows: no Springpark A/B found, skipping.");
+      console.log(
+        "[SeedService] seedLocationBookingWindows: no Springpark A/B found, skipping.",
+      );
       return;
     }
 
@@ -767,7 +771,9 @@ export class SeedService implements OnModuleInit {
       order: { name: "ASC" },
     });
     if (!locations.length) {
-      console.log("[SeedService] ensureExpandedCourtsAndPrices skip: Springpark A/B missing.");
+      console.log(
+        "[SeedService] ensureExpandedCourtsAndPrices skip: Springpark A/B missing.",
+      );
       return;
     }
 
@@ -820,7 +826,11 @@ export class SeedService implements OnModuleInit {
       },
     ];
 
-    const upsert = async (locationId: string, areaId: string, row: CourtSeed) => {
+    const upsert = async (
+      locationId: string,
+      areaId: string,
+      row: CourtSeed,
+    ) => {
       const media = pickTennisMedia(row.name);
       const court = await this.courtRepo.findOne({
         where: { locationId, name: row.name },
@@ -937,7 +947,9 @@ export class SeedService implements OnModuleInit {
       }
     }
 
-    console.log("[SeedService] Courts catalog: Springpark A/B seeded with Area 1/2/3 + Court 1/2/3.");
+    console.log(
+      "[SeedService] Courts catalog: Springpark A/B seeded with Area 1/2/3 + Court 1/2/3.",
+    );
   }
 
   /**

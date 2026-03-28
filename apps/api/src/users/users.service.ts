@@ -19,8 +19,11 @@ import { Location } from "../locations/entities/location.entity";
 import { Area } from "../areas/entities/area.entity";
 import { LocationKind } from "../locations/entities/location-kind.enum";
 
-function sanitizeUser<T extends Partial<User>>(user: T): Omit<T, "passwordHash"> {
+function sanitizeUser<T extends Partial<User>>(
+  user: T,
+): Omit<T, "passwordHash"> {
   if (!user) return user;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { passwordHash: _, ...rest } = user;
   return rest as Omit<T, "passwordHash">;
 }
@@ -100,7 +103,9 @@ export class UsersService {
   ) {
     let membershipFilterLocationId: string | undefined;
     if (areaId?.trim()) {
-      const area = await this.areaRepo.findOne({ where: { id: areaId.trim() } });
+      const area = await this.areaRepo.findOne({
+        where: { id: areaId.trim() },
+      });
       if (!area) {
         throw new BadRequestException("Area not found");
       }
@@ -147,18 +152,41 @@ export class UsersService {
       const locIdsForJoin = membershipFilterLocationId
         ? [membershipFilterLocationId]
         : superUserLocIds;
-      qb.innerJoin(
-        "user_location_memberships",
-        "um",
-        'um."userId" = user.id AND um."locationId" IN (:...locIds)',
-        { locIds: locIdsForJoin },
+      /**
+       * Venue staff used to inner-join memberships only, so anyone with zero venue rows
+       * disappeared from the list after “remove all memberships” (even accountType membership).
+       * Include membership placeholders with no membership row; still require venue overlap
+       * when onlyMembership filters list-eligible statuses.
+       */
+      qb.andWhere(
+        new Brackets((w) => {
+          if (onlyMembership) {
+            w.where(
+              `EXISTS (
+                SELECT 1 FROM user_location_memberships um
+                WHERE um."userId" = user.id
+                AND um."locationId" IN (:...locIds)
+                AND um.status IN (:...umStatuses)
+              )`,
+              { locIds: locIdsForJoin, umStatuses: MEMBERSHIP_LIST_STATUSES },
+            );
+          } else {
+            w.where(
+              `EXISTS (
+                SELECT 1 FROM user_location_memberships um
+                WHERE um."userId" = user.id
+                AND um."locationId" IN (:...locIds)
+              )`,
+              { locIds: locIdsForJoin },
+            ).orWhere(
+              `user.accountType = :orphanMembershipAt AND NOT EXISTS (
+                SELECT 1 FROM user_location_memberships nmu WHERE nmu."userId" = user.id
+              )`,
+              { orphanMembershipAt: UserAccountType.MEMBERSHIP },
+            );
+          }
+        }),
       );
-      if (onlyMembership) {
-        qb.andWhere("um.status IN (:...umStatuses)", {
-          umStatuses: MEMBERSHIP_LIST_STATUSES,
-        });
-      }
-      qb.distinct(true);
     } else if (onlyMembership) {
       if (membershipFilterLocationId && isAdminScope) {
         qb.innerJoin(
@@ -205,7 +233,11 @@ export class UsersService {
         },
       );
     }
-    if (forAreaAssignment && requester?.role === "super_user" && superUserLocIds?.length) {
+    if (
+      forAreaAssignment &&
+      requester?.role === "super_user" &&
+      superUserLocIds?.length
+    ) {
       qb.andWhere(
         new Brackets((w) => {
           w.where(
@@ -219,7 +251,9 @@ export class UsersService {
     }
     if (noMembershipAnywhere) {
       if (requester?.role !== "super_admin") {
-        throw new ForbiddenException("Only super administrators can use this filter");
+        throw new ForbiddenException(
+          "Only super administrators can use this filter",
+        );
       }
       qb.andWhere(
         `NOT EXISTS (SELECT 1 FROM user_location_memberships nma WHERE nma."userId" = user.id)`,
@@ -294,7 +328,9 @@ export class UsersService {
     }
     const base = sanitizeUser(user);
     if (!includeMemberships) return base;
-    const memberships = await this.membershipRepo.find({ where: { userId: id } });
+    const memberships = await this.membershipRepo.find({
+      where: { userId: id },
+    });
     return {
       ...base,
       memberships: memberships.map((m) => ({
@@ -341,7 +377,8 @@ export class UsersService {
       dto.firstName?.trim() || dto.fullName.trim().split(/\s+/)[0] || null;
     const resolvedLastName =
       dto.lastName?.trim() ||
-      (dto.fullName.trim().split(/\s+/).slice(1).join(" ").trim() || null);
+      dto.fullName.trim().split(/\s+/).slice(1).join(" ").trim() ||
+      null;
     const user = await this.userRepo.save(
       this.userRepo.create({
         email,
@@ -388,7 +425,9 @@ export class UsersService {
         throw new ForbiddenException("No location scope for this account");
       }
       if (dto.membershipLocationId && !my.includes(dto.membershipLocationId)) {
-        throw new ForbiddenException("Cannot assign membership outside your locations");
+        throw new ForbiddenException(
+          "Cannot assign membership outside your locations",
+        );
       }
     }
     const passwordHash = await bcrypt.hash(dto.password, 10);
@@ -414,7 +453,8 @@ export class UsersService {
         organizationId: dto.organizationId ?? null,
         branchId: dto.branchId ?? null,
         roleId: dto.roleId,
-        mustChangePasswordOnFirstLogin: dto.mustChangePasswordOnFirstLogin ?? false,
+        mustChangePasswordOnFirstLogin:
+          dto.mustChangePasswordOnFirstLogin ?? false,
         accountType,
       }),
     );
@@ -435,13 +475,18 @@ export class UsersService {
   }
 
   async update(id: string, dto: UpdateUserDto, requester?: UserRequesterScope) {
-    const user = await this.userRepo.findOne({ where: { id }, relations: ["role"] });
+    const user = await this.userRepo.findOne({
+      where: { id },
+      relations: ["role"],
+    });
     if (!user) throw new NotFoundException("User not found");
     if (requester) {
       await this.assertSuperUserCanAccessTargetUser(requester, id);
     }
     if (dto.email && dto.email !== user.email) {
-      const existing = await this.userRepo.findOne({ where: { email: dto.email } });
+      const existing = await this.userRepo.findOne({
+        where: { email: dto.email },
+      });
       if (existing) throw new BadRequestException("Email already in use");
     }
     const updates: Partial<User> = {
@@ -453,7 +498,9 @@ export class UsersService {
       ...(dto.homeAddress !== undefined && {
         homeAddress: dto.homeAddress ?? null,
       }),
-      ...(dto.organizationId !== undefined && { organizationId: dto.organizationId ?? null }),
+      ...(dto.organizationId !== undefined && {
+        organizationId: dto.organizationId ?? null,
+      }),
       ...(dto.branchId !== undefined && { branchId: dto.branchId ?? null }),
       ...(dto.roleId !== undefined && { roleId: dto.roleId }),
       ...(dto.status !== undefined && { status: dto.status }),
@@ -468,7 +515,10 @@ export class UsersService {
     await this.userRepo.update(id, updates);
 
     if (dto.membershipLocationId !== undefined) {
-      if (dto.membershipLocationId === null || dto.membershipLocationId === "") {
+      if (
+        dto.membershipLocationId === null ||
+        dto.membershipLocationId === ""
+      ) {
         if (requester?.role === "super_user") {
           throw new ForbiddenException("Cannot clear membership for this user");
         }
@@ -477,7 +527,9 @@ export class UsersService {
         if (requester?.role === "super_user") {
           const my = await this.memberLocationIdsForUser(requester.id);
           if (!my.includes(dto.membershipLocationId)) {
-            throw new ForbiddenException("Cannot assign membership outside your locations");
+            throw new ForbiddenException(
+              "Cannot assign membership outside your locations",
+            );
           }
         }
         const locExists = await this.locationRepo.exist({
@@ -501,7 +553,10 @@ export class UsersService {
   }
 
   async remove(id: string, requester?: UserRequesterScope) {
-    const user = await this.userRepo.findOne({ where: { id }, relations: ["role"] });
+    const user = await this.userRepo.findOne({
+      where: { id },
+      relations: ["role"],
+    });
     if (!user) throw new NotFoundException("User not found");
     if (requester) {
       await this.assertSuperUserCanAccessTargetUser(requester, id);
