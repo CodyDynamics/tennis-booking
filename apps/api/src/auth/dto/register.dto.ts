@@ -1,5 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsEmail, IsString, MinLength, IsOptional, IsUUID, IsNotEmpty } from "class-validator";
+import {
+  IsEmail,
+  IsString,
+  MinLength,
+  IsOptional,
+  IsUUID,
+  IsNotEmpty,
+  MaxLength,
+  Matches,
+} from "class-validator";
 
 export class RegisterDto {
   @ApiProperty({ example: "user@example.com", description: "Registration email" })
@@ -25,10 +34,40 @@ export class RegisterDto {
   @IsString()
   lastName?: string;
 
-  @ApiProperty({ example: "+15551234567", description: "Phone number (required)" })
+  @ApiProperty({
+    example: "+15551234567",
+    description: "US mobile in E.164 (+1 + 10 digits)",
+  })
   @IsString()
   @IsNotEmpty()
+  @Matches(/^\+1\d{10}$/, {
+    message: "Phone must be a valid US number (+1 and exactly 10 digits)",
+  })
   phone: string;
+
+  @ApiProperty({ example: "123 Main St", description: "Street address" })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  street: string;
+
+  @ApiProperty({ example: "Austin" })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  city: string;
+
+  @ApiProperty({ example: "TX" })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(50)
+  state: string;
+
+  @ApiProperty({ example: "78701" })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(10)
+  zipCode: string;
 
   @ApiPropertyOptional({ description: "Organization UUID" })
   @IsOptional()
@@ -39,9 +78,4 @@ export class RegisterDto {
   @IsOptional()
   @IsUUID()
   branchId?: string;
-
-  @ApiPropertyOptional({ description: "Residential address (optional)" })
-  @IsOptional()
-  @IsString()
-  homeAddress?: string;
 }

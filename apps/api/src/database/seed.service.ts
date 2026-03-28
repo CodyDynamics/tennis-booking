@@ -106,18 +106,19 @@ export class SeedService implements OnModuleInit {
     try {
       await this.seedRoles();
       await this.seedSportsTable();
-      await this.seedSportsData();
-      await this.ensureLocationMapMetadata();
+      // --- Locations, courts, coach users, demo memberships: create manually after DB clear ---
+      // await this.seedSportsData();
+      // await this.ensureLocationMapMetadata();
       // Manual DB cleanup is handled externally when needed.
       // Skip auto-delete in seed flow to avoid FK/TRUNCATE issues.
       // await this.clearBookingsAndWindows();
-      await this.seedLocationBookingWindows();
-      await this.ensureExpandedCourtsAndPrices();
-      await this.updateCourtsWithImages();
-      await this.seedCoaches();
-      await this.assignCoachCourtAffiliations();
-      await this.seedPrivateClubDemoMember();
-      await this.assignUsersToSpringparkLocations();
+      // await this.seedLocationBookingWindows();
+      // await this.ensureExpandedCourtsAndPrices();
+      // await this.updateCourtsWithImages();
+      // await this.seedCoaches();
+      // await this.assignCoachCourtAffiliations();
+      // await this.seedPrivateClubDemoMember();
+      // await this.assignUsersToSpringparkLocations();
       console.log("[SeedService] Seed finished.");
     } catch (err) {
       console.error("[SeedService] Seed failed:", err);

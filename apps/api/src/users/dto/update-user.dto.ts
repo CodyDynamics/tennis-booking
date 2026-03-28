@@ -1,6 +1,14 @@
 import { PartialType, OmitType } from "@nestjs/swagger";
 import { CreateUserDto } from "./create-user.dto";
-import { IsOptional, IsString, IsIn, MinLength, IsUUID, ValidateIf } from "class-validator";
+import { UserAccountType } from "../entities/user-account-type.enum";
+import {
+  IsOptional,
+  IsString,
+  IsIn,
+  MinLength,
+  IsUUID,
+  ValidateIf,
+} from "class-validator";
 import { ApiPropertyOptional } from "@nestjs/swagger";
 
 export class UpdateUserDto extends PartialType(
@@ -27,4 +35,13 @@ export class UpdateUserDto extends PartialType(
   @ValidateIf((o) => o.membershipLocationId !== null && o.membershipLocationId !== undefined)
   @IsUUID()
   membershipLocationId?: string | null;
+
+  @ApiPropertyOptional({ enum: UserAccountType })
+  @IsOptional()
+  @IsIn([
+    UserAccountType.SYSTEM,
+    UserAccountType.NORMAL,
+    UserAccountType.MEMBERSHIP,
+  ])
+  accountType?: UserAccountType;
 }

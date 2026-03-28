@@ -1,23 +1,21 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 import { Area } from "./entities/area.entity";
 import { CreateAreaDto } from "./dto/create-area.dto";
 import { UpdateAreaDto } from "./dto/update-area.dto";
-import { UserLocationMembership } from "../memberships/entities/user-location-membership.entity";
-import { MembershipStatus } from "../memberships/entities/membership.enums";
 import { LocationVisibility } from "../locations/entities/location.enums";
 import { User } from "../users/entities/user.entity";
+import { LocationsService } from "../locations/locations.service";
 
 @Injectable()
 export class AreasService {
   constructor(
     @InjectRepository(Area)
     private readonly areaRepo: Repository<Area>,
-    @InjectRepository(UserLocationMembership)
-    private readonly membershipRepo: Repository<UserLocationMembership>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    private readonly locationsService: LocationsService,
   ) {}
 
   create(dto: CreateAreaDto) {
@@ -33,8 +31,8 @@ export class AreasService {
 
   /**
    * - super_admin: all active areas (every location).
-   * - User with membership (eligible status): public + private areas only at those locations.
-   * - Everyone else (e.g. new registrants with no membership): none — must be assigned first.
+   * - User with venue membership (same rules as bookable locations): areas at those child venues.
+   * - No membership: none.
    */
   async findBookableForUser(userId: string): Promise<Area[]> {
     const user = await this.userRepo.findOne({
@@ -48,27 +46,23 @@ export class AreasService {
       });
     }
 
-    const memberships = await this.membershipRepo.find({ where: { userId } });
-    const memberLocationIds = memberships
-      .filter((m) =>
-        [MembershipStatus.ACTIVE, MembershipStatus.GRACE, MembershipStatus.PENDING_PAYMENT].includes(
-          m.status,
-        ),
-      )
-      .map((m) => m.locationId);
-
-    if (memberLocationIds.length === 0) {
+    const locationIds =
+      await this.locationsService.getBookableLocationIdsForUser(userId);
+    if (locationIds.length === 0) {
       return [];
     }
 
-    const qb = this.areaRepo
-      .createQueryBuilder("area")
-      .where("area.status = :status", { status: "active" })
-      .andWhere("area.locationId IN (:...ids)", { ids: memberLocationIds })
-      .andWhere("area.visibility IN (:...vis)", {
-        vis: [LocationVisibility.PUBLIC, LocationVisibility.PRIVATE],
-      });
-    return qb.orderBy("area.name", "ASC").getMany();
+    return this.areaRepo.find({
+      where: {
+        status: "active",
+        locationId: In(locationIds),
+        visibility: In([
+          LocationVisibility.PUBLIC,
+          LocationVisibility.PRIVATE,
+        ]),
+      },
+      order: { name: "ASC" },
+    });
   }
 
   async findOne(id: string) {

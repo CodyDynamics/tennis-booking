@@ -20,8 +20,8 @@ export class Location {
   @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column()
-  branchId: string;
+  @Column({ type: "uuid", nullable: true })
+  branchId: string | null;
 
   @Column({ type: "uuid", nullable: true })
   parentLocationId: string | null;
@@ -84,9 +84,9 @@ export class Location {
   @UpdateDateColumn()
   updatedAt: Date;
 
-  @ManyToOne(() => Branch, { onDelete: "CASCADE" })
+  @ManyToOne(() => Branch, { onDelete: "CASCADE", nullable: true })
   @JoinColumn({ name: "branchId" })
-  branch: Branch;
+  branch: Branch | null;
 
   @ManyToOne(() => Location, { onDelete: "SET NULL", nullable: true })
   @JoinColumn({ name: "parentLocationId" })

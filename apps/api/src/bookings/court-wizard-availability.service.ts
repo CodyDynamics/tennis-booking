@@ -18,9 +18,8 @@ import {
   CoachSession,
   CoachSessionStatus,
 } from "./entities/coach-session.entity";
-import { MembershipStatus } from "../memberships/entities/membership.enums";
-import { UserLocationMembership } from "../memberships/entities/user-location-membership.entity";
 import { Area } from "../areas/entities/area.entity";
+import { LocationsService } from "../locations/locations.service";
 import {
   wallClockMinutesNowInTimeZone,
   ymdTodayInIanaTimeZone,
@@ -130,24 +129,20 @@ export class CourtWizardAvailabilityService {
     private readonly courtBookingRepo: Repository<CourtBooking>,
     @InjectRepository(CoachSession)
     private readonly coachSessionRepo: Repository<CoachSession>,
-    @InjectRepository(UserLocationMembership)
-    private readonly membershipRepo: Repository<UserLocationMembership>,
     @InjectRepository(Area)
     private readonly areaRepo: Repository<Area>,
+    private readonly locationsService: LocationsService,
   ) {}
 
   private async assertCanAccessLocation(userId: string, location: Location) {
     if (location.visibility !== LocationVisibility.PRIVATE) return;
-    const m = await this.membershipRepo.findOne({
-      where: {
-        userId,
-        locationId: location.id,
-        status: MembershipStatus.ACTIVE,
-      },
-    });
-    if (!m) {
+    const ok = await this.locationsService.canAccessPrivateVenue(
+      userId,
+      location.id,
+    );
+    if (!ok) {
       throw new ForbiddenException(
-        "An active membership is required to view booking windows at this private location",
+        "A venue membership is required to view booking windows at this private location",
       );
     }
   }
@@ -163,17 +158,13 @@ export class CourtWizardAvailabilityService {
       throw new BadRequestException("Area is invalid for this location");
     }
     if (area.visibility === LocationVisibility.PRIVATE) {
-      const m = await this.membershipRepo.findOne({
-        where: { userId, locationId },
-      });
-      const canAccess =
-        !!m &&
-        [MembershipStatus.ACTIVE, MembershipStatus.GRACE, MembershipStatus.PENDING_PAYMENT].includes(
-          m.status,
-        );
-      if (!canAccess) {
+      const ok = await this.locationsService.canAccessPrivateVenue(
+        userId,
+        locationId,
+      );
+      if (!ok) {
         throw new ForbiddenException(
-          "An active membership is required to book this private area",
+          "A venue membership is required to book this private area",
         );
       }
     }
@@ -283,7 +274,7 @@ export class CourtWizardAvailabilityService {
         bookingDate: dateStr,
         windowId,
         durationMinutes,
-        slotGridMinutes: window.slotGridMinutes,
+        slotGridMinutes: durationMinutes,
         courts: [],
         slots: [],
       };
@@ -330,14 +321,15 @@ export class CourtWizardAvailabilityService {
 
     const wStart = timeToMinutes(window.windowStartTime);
     const wEnd = timeToMinutes(window.windowEndTime);
-    const grid = Math.max(5, window.slotGridMinutes);
+    /** Start times are spaced by the booking length (30 → :00/:30 hourly grid feel; 60 → hourly; 90 → 1h30 steps). */
+    const stepMinutes = durationMinutes;
     const nowMinVenue =
       dateStr === todayYmd
         ? wallClockMinutesNowInTimeZone(location.timezone)
         : null;
 
     const slots: WizardSlotDto[] = [];
-    for (let t = wStart; t + durationMinutes <= wEnd; t += grid) {
+    for (let t = wStart; t + durationMinutes <= wEnd; t += stepMinutes) {
       if (nowMinVenue !== null && t < nowMinVenue) {
         continue;
       }
@@ -369,7 +361,7 @@ export class CourtWizardAvailabilityService {
       bookingDate: dateStr,
       windowId,
       durationMinutes,
-      slotGridMinutes: grid,
+      slotGridMinutes: stepMinutes,
       courts: courts.map((c) => ({
         id: c.id,
         name: c.name,
@@ -450,7 +442,8 @@ export class CourtWizardAvailabilityService {
     // otherwise fallback to location-level windows (courtId=null).
     const nowMinVenue = dateStr === todayYmd ? wallClockMinutesNowInTimeZone(location.timezone) : null;
     const candidateSet = new Set<number>();
-    const grid = 30; // fixed 30-min grid for new flow
+    /** Slot starts every `durationMinutes` so 60m → 08:00, 09:00… and 90m → 08:00, 09:30… */
+    const stepMinutes = durationMinutes;
     const windowsByCourt = new Map<string, LocationBookingWindow[]>();
     const globalWindows = windows.filter((w) => !w.courtId);
     for (const c of courts) {
@@ -465,7 +458,7 @@ export class CourtWizardAvailabilityService {
         if (!allowed.includes(durationMinutes)) continue;
         const wStart = timeToMinutes(w.windowStartTime);
         const wEnd = timeToMinutes(w.windowEndTime);
-        for (let t = wStart; t + durationMinutes <= wEnd; t += grid) {
+        for (let t = wStart; t + durationMinutes <= wEnd; t += stepMinutes) {
           if (nowMinVenue !== null && t < nowMinVenue) continue;
           candidateSet.add(t);
         }

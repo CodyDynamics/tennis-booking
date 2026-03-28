@@ -34,7 +34,8 @@ describe("AuthController", () => {
   let authService: AuthService;
 
   const mockAuthService = {
-    register: jest.fn(),
+    requestRegisterOtp: jest.fn(),
+    verifyRegisterOtp: jest.fn(),
     login: jest.fn(),
     googleLogin: jest.fn(),
     forgotPassword: jest.fn(),
@@ -66,24 +67,44 @@ describe("AuthController", () => {
     expect(controller).toBeDefined();
   });
 
-  describe("register", () => {
-    it("should call authService.register with body", async () => {
+  describe("requestRegisterOtp", () => {
+    it("should call authService.requestRegisterOtp with body", async () => {
       const dto: RegisterDto = {
         email: "test@example.com",
         password: "password123",
         fullName: "Test",
         phone: "+15550000000",
+        street: "1 Main",
+        city: "Austin",
+        state: "TX",
+        zipCode: "78701",
       };
-      mockAuthService.register.mockResolvedValue({
+      mockAuthService.requestRegisterOtp.mockResolvedValue({ message: "ok" });
+
+      await controller.requestRegisterOtp(dto);
+
+      expect(authService.requestRegisterOtp).toHaveBeenCalledWith(dto);
+    });
+  });
+
+  describe("verifyRegisterOtp", () => {
+    it("should call authService.verifyRegisterOtp and set cookies", async () => {
+      mockAuthService.verifyRegisterOtp.mockResolvedValue({
         user: {},
         accessToken: "x",
         refreshToken: "y",
       });
 
       const res = mockRes();
-      await controller.register(dto, res);
+      await controller.verifyRegisterOtp(
+        { email: "test@example.com", otp: "123456" },
+        res,
+      );
 
-      expect(authService.register).toHaveBeenCalledWith(dto);
+      expect(authService.verifyRegisterOtp).toHaveBeenCalledWith(
+        "test@example.com",
+        "123456",
+      );
     });
   });
 

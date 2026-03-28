@@ -46,19 +46,35 @@ if [ -z "$ROLE_ID" ]; then
     exit 1
 fi
 
-# Register
-echo -e "\n${BLUE}Registering user...${NC}"
-REGISTER_RESPONSE=$(curl -s -X POST $BASE_URL/auth/register \
+# Register (request OTP → verify with code from email)
+echo -e "\n${BLUE}Requesting registration OTP...${NC}"
+TEST_EMAIL="test$(date +%s)@example.com"
+curl -s -X POST "$BASE_URL/auth/register/request-otp" \
   -H "Content-Type: application/json" \
   -d "{
-    \"email\": \"test$(date +%s)@example.com\",
+    \"email\": \"$TEST_EMAIL\",
     \"password\": \"password123\",
     \"fullName\": \"Test User\",
-    \"phone\": \"+84123456789\",
-    \"roleId\": \"$ROLE_ID\"
+    \"firstName\": \"Test\",
+    \"lastName\": \"User\",
+    \"phone\": \"+15551234567\",
+    \"street\": \"123 Main St\",
+    \"city\": \"Austin\",
+    \"state\": \"TX\",
+    \"zipCode\": \"78701\"
+  }" | jq
+echo -e "${GREEN}Check email for OTP, then enter it below.${NC}"
+read -p "6-digit OTP: " REG_OTP
+
+echo -e "\n${BLUE}Completing registration...${NC}"
+REGISTER_RESPONSE=$(curl -s -X POST "$BASE_URL/auth/register/verify-otp" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"email\": \"$TEST_EMAIL\",
+    \"otp\": \"$REG_OTP\"
   }")
 
-if echo "$REGISTER_RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
+if echo "$REGISTER_RESPONSE" | jq -e '.statusCode' > /dev/null 2>&1; then
     echo -e "${RED}Registration failed:${NC}"
     echo "$REGISTER_RESPONSE" | jq
     exit 1

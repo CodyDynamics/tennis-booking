@@ -26,6 +26,9 @@ import {
 } from "./dto";
 import { EmailService } from "../email/email.service";
 import { OtpStoreService } from "./otp-store.service";
+import { RegisterPendingStoreService } from "./register-pending-store.service";
+import { RolesService } from "../roles/roles.service";
+import { UserAccountType } from "../users/entities/user-account-type.enum";
 
 @Injectable()
 export class AuthService {
@@ -44,50 +47,200 @@ export class AuthService {
     private configService: ConfigService,
     private emailService: EmailService,
     private otpStore: OtpStoreService,
+    private registerPendingStore: RegisterPendingStoreService,
     private redisService: RedisService,
+    private rolesService: RolesService,
   ) {}
 
-  async register(registerDto: RegisterDto) {
+  private last10Digits(phone: string): string {
+    const d = (phone || "").replace(/\D/g, "");
+    return d.length >= 10 ? d.slice(-10) : d;
+  }
+
+  private phonesMatch(a: string, b: string): boolean {
+    const na = this.last10Digits(a);
+    const nb = this.last10Digits(b);
+    return na.length === 10 && nb.length === 10 && na === nb;
+  }
+
+  private formatHomeAddress(
+    street: string,
+    city: string,
+    state: string,
+    zipCode: string,
+  ): string {
+    const line2 = `${state.trim()} ${zipCode.trim()}`.trim();
+    return [street.trim(), city.trim(), line2].filter(Boolean).join(", ");
+  }
+
+  /** Allow OTP signup if email is new, or matches a membership placeholder (no password yet). */
+  private async assertEmailAllowedForRegistrationRequest(
+    email: string,
+    organizationId?: string | null,
+  ): Promise<void> {
+    const byEmail = await this.userRepo.find({ where: { email } });
+    const existingUser = byEmail.find(
+      (u) => (organizationId || null) === (u.organizationId || null),
+    );
+    if (!existingUser) return;
+    if (
+      existingUser.accountType === UserAccountType.MEMBERSHIP &&
+      !existingUser.passwordHash
+    ) {
+      return;
+    }
+    throw new BadRequestException("User with this email already exists");
+  }
+
+  /**
+   * Step 1: validate data, store pending registration, email OTP. User is created after verifyRegisterOtp.
+   */
+  async requestRegisterOtp(registerDto: RegisterDto) {
+    const email = registerDto.email.trim().toLowerCase();
     const {
-      email,
       password,
       fullName,
       firstName,
       lastName,
       phone,
-      homeAddress,
+      street,
+      city,
+      state,
+      zipCode,
       organizationId,
       branchId,
     } = registerDto;
 
-    const byEmail = await this.userRepo.find({ where: { email } });
-    const existingUser = byEmail.find(
-      (u) => (organizationId || null) === (u.organizationId || null),
+    await this.assertEmailAllowedForRegistrationRequest(
+      email,
+      organizationId ?? null,
     );
-    if (existingUser) {
-      throw new BadRequestException("User with this email already exists");
-    }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const resolvedFirstName = firstName?.trim() || fullName.trim().split(/\s+/)[0] || null;
+    const resolvedFirstName =
+      firstName?.trim() || fullName.trim().split(/\s+/)[0] || null;
     const resolvedLastName =
       lastName?.trim() ||
       (fullName.trim().split(/\s+/).slice(1).join(" ").trim() || null);
+    const homeAddress = this.formatHomeAddress(street, city, state, zipCode);
 
+    this.registerPendingStore.set(email, {
+      passwordHash,
+      fullName: fullName.trim(),
+      firstName: resolvedFirstName,
+      lastName: resolvedLastName,
+      phone,
+      homeAddress,
+      organizationId: organizationId ?? null,
+      branchId: branchId ?? null,
+    });
+
+    const length = this.configService.get<number>("otp.loginLength", 6);
+    const otp = crypto
+      .randomInt(10 ** (length - 1), 10 ** length)
+      .toString()
+      .padStart(length, "0");
+    this.otpStore.set("register", email, otp);
+    try {
+      await this.emailService.sendRegistrationOtpEmail(email, otp);
+    } catch (err) {
+      this.registerPendingStore.delete(email);
+      this.otpStore.clear("register", email);
+      this.logger.error(
+        `Send registration OTP failed for ${email}: ${err instanceof Error ? err.message : String(err)}`,
+        err instanceof Error ? err.stack : undefined,
+      );
+      throw new ServiceUnavailableException(
+        "Unable to send verification email. Please try again later or contact support.",
+      );
+    }
+
+    return {
+      message:
+        "We sent a verification code to your email. Enter it to complete registration.",
+    };
+  }
+
+  /** Step 2: verify OTP and persist the user. */
+  async verifyRegisterOtp(emailRaw: string, otp: string) {
+    const email = emailRaw.trim().toLowerCase();
+    const pending = this.registerPendingStore.get(email);
+    if (!pending) {
+      throw new BadRequestException(
+        "Registration session expired. Please submit the form again.",
+      );
+    }
+    if (!this.otpStore.consume("register", email, otp)) {
+      throw new UnauthorizedException("Invalid or expired verification code");
+    }
+    this.registerPendingStore.delete(email);
+
+    const existing = await this.userRepo.findOne({
+      where: { email },
+      relations: ["role"],
+    });
+
+    if (existing) {
+      if (
+        existing.accountType === UserAccountType.MEMBERSHIP &&
+        !existing.passwordHash &&
+        this.phonesMatch(existing.phone, pending.phone)
+      ) {
+        await this.userRepo.update(existing.id, {
+          passwordHash: pending.passwordHash,
+          fullName: pending.fullName,
+          firstName: pending.firstName,
+          lastName: pending.lastName,
+          phone: pending.phone,
+          homeAddress: pending.homeAddress,
+          ...(pending.organizationId != null && {
+            organizationId: pending.organizationId,
+          }),
+          ...(pending.branchId != null && { branchId: pending.branchId }),
+        });
+        const userWithRole = await this.userRepo.findOne({
+          where: { id: existing.id },
+          relations: ["role"],
+        });
+        if (!userWithRole) throw new BadRequestException("User not found");
+        const tokens = await this.generateTokens(
+          userWithRole.id,
+          userWithRole.email,
+          userWithRole.organizationId ?? undefined,
+          userWithRole.roleId ?? undefined,
+          { rememberMe: false },
+        );
+        return {
+          user: {
+            id: userWithRole.id,
+            email: userWithRole.email,
+            fullName: userWithRole.fullName,
+            role: userWithRole.role?.name,
+            mustChangePasswordOnFirstLogin:
+              userWithRole.mustChangePasswordOnFirstLogin,
+          },
+          ...tokens,
+        };
+      }
+      throw new BadRequestException("User with this email already exists");
+    }
+
+    const playerRole = await this.rolesService.findByName("player");
     const user = await this.userRepo.save(
       this.userRepo.create({
         email,
-        passwordHash,
-        fullName,
-        firstName: resolvedFirstName,
-        lastName: resolvedLastName,
-        phone,
-        homeAddress: homeAddress ?? null,
-        organizationId,
-        branchId,
-        roleId: null,
+        passwordHash: pending.passwordHash,
+        fullName: pending.fullName,
+        firstName: pending.firstName,
+        lastName: pending.lastName,
+        phone: pending.phone,
+        homeAddress: pending.homeAddress,
+        organizationId: pending.organizationId ?? undefined,
+        branchId: pending.branchId ?? undefined,
+        roleId: playerRole?.id ?? null,
         courtId: null,
         visibility: "public",
+        accountType: UserAccountType.NORMAL,
       }),
     );
     const userWithRole = await this.userRepo.findOne({
@@ -122,7 +275,7 @@ export class AuthService {
       where: { email },
       relations: ["role"],
     });
-    if (!user || !user.passwordHash) return null;
+    if (!user?.passwordHash) return null;
 
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) return null;
@@ -190,6 +343,7 @@ export class AuthService {
           roleId: defaultRole.id,
           /** Placeholder until user completes profile; required by schema */
           phone: "+10000000000",
+          accountType: UserAccountType.NORMAL,
         }),
       );
       user = (await this.userRepo.findOne({
@@ -283,7 +437,7 @@ export class AuthService {
       .randomInt(10 ** (length - 1), 10 ** length)
       .toString()
       .padStart(length, "0");
-    this.otpStore.set(user.email, otp);
+    this.otpStore.set("login", user.email, otp);
     try {
       await this.emailService.sendLoginOtpEmail(user.email, otp);
     } catch (err) {
@@ -309,7 +463,7 @@ export class AuthService {
     if (!user || user.status !== "active") {
       throw new UnauthorizedException("Invalid or expired OTP");
     }
-    if (!this.otpStore.consume(user.email, otp)) {
+    if (!this.otpStore.consume("login", user.email, otp)) {
       throw new UnauthorizedException("Invalid or expired OTP");
     }
     const tokens = await this.generateTokens(

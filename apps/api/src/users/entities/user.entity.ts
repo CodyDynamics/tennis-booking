@@ -10,6 +10,7 @@ import {
 } from "typeorm";
 import { Role } from "../../roles/entities/role.entity";
 import { Court } from "../../courts/entities/court.entity";
+import { UserAccountType } from "./user-account-type.enum";
 
 @Entity("users")
 @Unique(["organizationId", "email"])
@@ -72,6 +73,13 @@ export class User {
    */
   @Column({ type: "varchar", length: 16, default: "public" })
   visibility: "public" | "private";
+
+  @Column({
+    type: "varchar",
+    length: 32,
+    default: UserAccountType.NORMAL,
+  })
+  accountType: UserAccountType;
 
   @CreateDateColumn()
   createdAt: Date;

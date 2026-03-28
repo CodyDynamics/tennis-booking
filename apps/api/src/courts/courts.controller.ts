@@ -41,6 +41,37 @@ export class CourtsController {
     return this.courtsService.create(dto);
   }
 
+  @Get("booking-windows")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission("courts:view")
+  @ApiBearerAuth("JWT")
+  @ApiOperation({
+    summary:
+      "List per-court booking windows (Court Time Slot). Empty until slots are configured for a court.",
+  })
+  @ApiQuery({ name: "branchId", required: false })
+  @ApiQuery({ name: "search", required: false })
+  @ApiResponse({ status: 200 })
+  listBookingWindows(
+    @Query("branchId") branchId?: string,
+    @Query("search") search?: string,
+  ) {
+    return this.courtsService.listCourtBookingWindowsForAdmin(branchId, search);
+  }
+
+  @Delete("booking-windows/:windowId")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission("courts:delete")
+  @ApiBearerAuth("JWT")
+  @ApiOperation({
+    summary:
+      "Remove a court time slot (booking window). Does not delete the court in Court Management.",
+  })
+  @ApiParam({ name: "windowId" })
+  removeBookingWindow(@Param("windowId") windowId: string) {
+    return this.courtsService.removeCourtBookingWindow(windowId);
+  }
+
   @Get()
   @ApiOperation({ summary: "List courts (filter by locationId, branchId, status, search, sport)" })
   @ApiQuery({ name: "locationId", required: false })

@@ -24,6 +24,7 @@ import {
   RefreshTokenDto,
   RequestLoginOtpDto,
   VerifyLoginOtpDto,
+  VerifyRegisterOtpDto,
 } from "./dto";
 import { AuthResponseDto } from "./dto/auth-response.dto";
 
@@ -94,7 +95,7 @@ export class AuthController {
   getConfig() {
     const loginOtpEnabled = this.configService.get<boolean>(
       "auth.loginOtpEnabled",
-      true,
+      false,
     );
     return { loginOtpEnabled };
   }
@@ -114,25 +115,33 @@ export class AuthController {
     res.cookie(refreshName, "", { ...opts, secure, maxAge: 0 });
   }
 
-  @Post("register")
+  @Post("register/request-otp")
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Start registration: validate data and send email verification code",
+  })
+  @ApiBody({ type: RegisterDto })
+  @ApiResponse({ status: 200, description: "OTP sent to email" })
+  async requestRegisterOtp(@Body() registerDto: RegisterDto) {
+    return this.authService.requestRegisterOtp(registerDto);
+  }
+
+  @Post("register/verify-otp")
   @Public()
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: "Register account" })
-  @ApiBody({ type: RegisterDto })
+  @ApiOperation({ summary: "Complete registration after email OTP" })
+  @ApiBody({ type: VerifyRegisterOtpDto })
   @ApiResponse({
     status: 201,
     description: "Registration successful",
     type: AuthResponseDto,
   })
-  @ApiResponse({
-    status: 400,
-    description: "Invalid data or email already exists",
-  })
-  async register(
-    @Body() registerDto: RegisterDto,
+  async verifyRegisterOtp(
+    @Body() dto: VerifyRegisterOtpDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.authService.register(registerDto);
+    const result = await this.authService.verifyRegisterOtp(dto.email, dto.otp);
     this.setAuthCookies(res, result.accessToken, result.refreshToken);
     return { user: result.user, accessToken: result.accessToken };
   }

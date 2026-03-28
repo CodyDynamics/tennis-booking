@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
+export type OtpPurpose = "login" | "register";
+
 interface StoredOtp {
   otp: string;
   expiresAt: number;
@@ -15,30 +17,37 @@ export class OtpStoreService {
     this.ttlSeconds = this.configService.get<number>("otp.loginTtlSeconds", 300);
   }
 
-  set(email: string, otp: string): void {
-    const key = email.toLowerCase().trim();
-    this.store.set(key, {
+  private key(purpose: OtpPurpose, email: string): string {
+    return `${purpose}:${email.toLowerCase().trim()}`;
+  }
+
+  set(purpose: OtpPurpose, email: string, otp: string): void {
+    this.store.set(this.key(purpose, email), {
       otp,
       expiresAt: Date.now() + this.ttlSeconds * 1000,
     });
   }
 
-  get(email: string): string | null {
-    const key = email.toLowerCase().trim();
-    const entry = this.store.get(key);
+  get(purpose: OtpPurpose, email: string): string | null {
+    const k = this.key(purpose, email);
+    const entry = this.store.get(k);
     if (!entry) return null;
     if (Date.now() > entry.expiresAt) {
-      this.store.delete(key);
+      this.store.delete(k);
       return null;
     }
     return entry.otp;
   }
 
-  consume(email: string, otp: string): boolean {
-    const key = email.toLowerCase().trim();
-    const stored = this.get(email);
+  consume(purpose: OtpPurpose, email: string, otp: string): boolean {
+    const k = this.key(purpose, email);
+    const stored = this.get(purpose, email);
     if (stored === null || stored !== otp) return false;
-    this.store.delete(key);
+    this.store.delete(k);
     return true;
+  }
+
+  clear(purpose: OtpPurpose, email: string): void {
+    this.store.delete(this.key(purpose, email));
   }
 }

@@ -15,9 +15,10 @@ import {
 import { LocationKind } from "../entities/location-kind.enum";
 
 export class CreateLocationDto {
-  @ApiProperty()
+  @ApiPropertyOptional({ description: "Optional; omit for standalone locations" })
+  @IsOptional()
   @IsUUID()
-  branchId: string;
+  branchId?: string;
 
   @ApiPropertyOptional({ description: "Parent location UUID (for location child)" })
   @IsOptional()

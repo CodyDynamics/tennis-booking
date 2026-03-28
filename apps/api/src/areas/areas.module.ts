@@ -3,11 +3,14 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { Area } from "./entities/area.entity";
 import { AreasService } from "./areas.service";
 import { AreasController } from "./areas.controller";
-import { UserLocationMembership } from "../memberships/entities/user-location-membership.entity";
 import { User } from "../users/entities/user.entity";
+import { LocationsModule } from "../locations/locations.module";
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Area, UserLocationMembership, User])],
+  imports: [
+    TypeOrmModule.forFeature([Area, User]),
+    LocationsModule,
+  ],
   providers: [AreasService],
   controllers: [AreasController],
   exports: [AreasService, TypeOrmModule],

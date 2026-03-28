@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { buildListResponse, ListResponse } from "@app/common";
@@ -8,6 +12,7 @@ import { CreateCourtDto } from "./dto/create-court.dto";
 import { UpdateCourtDto } from "./dto/update-court.dto";
 import { LocationBookingWindow } from "../locations/entities/location-booking-window.entity";
 import { Sport } from "../sports/entities/sport.entity";
+import { CourtBookingWindowAdminDto } from "./dto/court-booking-window-admin.dto";
 
 /** @deprecated Use pricePerHourPublic; kept on API responses for backward compatibility */
 export type CourtWithLegacyPrice = Court & { pricePerHour: number };
@@ -204,6 +209,81 @@ export class CourtsService {
   async remove(id: string) {
     await this.findOne(id);
     await this.courtRepo.delete(id);
+    return { deleted: true };
+  }
+
+  private timeToHHmm(value: string | Date | undefined | null): string {
+    if (value === undefined || value === null) return "00:00";
+    if (typeof value === "string") {
+      return value.length >= 5 ? value.slice(0, 5) : value;
+    }
+    if (value instanceof Date) {
+      const h = value.getUTCHours();
+      const m = value.getUTCMinutes();
+      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    }
+    return "00:00";
+  }
+
+  /**
+   * Admin Court Time Slot list: only windows attached to a court (created via Court Management + slot).
+   */
+  async listCourtBookingWindowsForAdmin(
+    branchId?: string,
+    search?: string,
+  ): Promise<CourtBookingWindowAdminDto[]> {
+    const qb = this.bookingWindowRepo
+      .createQueryBuilder("w")
+      .innerJoinAndSelect("w.court", "court")
+      .innerJoinAndSelect("w.location", "location")
+      .where("w.courtId IS NOT NULL");
+    if (branchId?.trim()) {
+      qb.andWhere("location.branchId = :branchId", { branchId: branchId.trim() });
+    }
+    if (search?.trim()) {
+      qb.andWhere(
+        "(LOWER(court.name) LIKE :q OR LOWER(location.name) LIKE :q)",
+        { q: `%${search.trim().toLowerCase()}%` },
+      );
+    }
+    qb.orderBy("location.name", "ASC")
+      .addOrderBy("court.name", "ASC")
+      .addOrderBy("w.windowStartTime", "ASC");
+    const rows = await qb.getMany();
+    return rows.map((w) => {
+      const court = w.court!;
+      const loc = w.location;
+      return {
+        id: w.id,
+        courtId: court.id,
+        courtName: court.name,
+        locationId: w.locationId,
+        locationName: loc?.name ?? "",
+        sport: w.sport,
+        courtType: w.courtType,
+        windowStartTime: this.timeToHHmm(
+          w.windowStartTime as unknown as string | Date,
+        ),
+        windowEndTime: this.timeToHHmm(
+          w.windowEndTime as unknown as string | Date,
+        ),
+        isActive: w.isActive,
+        pricePerHour: parseFloat(String(court.pricePerHourPublic ?? 0)),
+        courtStatus: court.status,
+        description: court.description ?? null,
+      };
+    });
+  }
+
+  async removeCourtBookingWindow(windowId: string) {
+    const w = await this.bookingWindowRepo.findOne({ where: { id: windowId } });
+    if (!w) throw new NotFoundException("Booking window not found");
+    if (!w.courtId) {
+      throw new BadRequestException(
+        "This window is not tied to a court; remove it from location settings instead.",
+      );
+    }
+    await this.bookingWindowRepo.delete(windowId);
     return { deleted: true };
   }
 }

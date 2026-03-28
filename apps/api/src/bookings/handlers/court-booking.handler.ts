@@ -10,8 +10,8 @@ import { DataSource, QueryFailedError, Repository } from "typeorm";
 import { CoachesService } from "../../coaches/coaches.service";
 import { CourtsService } from "../../courts/courts.service";
 import { LocationVisibility } from "../../locations/entities/location.enums";
-import { MembershipStatus } from "../../memberships/entities/membership.enums";
 import { UserLocationMembership } from "../../memberships/entities/user-location-membership.entity";
+import { LocationsService } from "../../locations/locations.service";
 import {
   CourtBooking,
   CourtBookingStatus,
@@ -69,10 +69,9 @@ export class CourtBookingHandler implements IBookingHandler {
     private readonly courtBookingRepo: Repository<CourtBooking>,
     @InjectRepository(CoachSession)
     private readonly coachSessionRepo: Repository<CoachSession>,
-    @InjectRepository(UserLocationMembership)
-    private readonly membershipRepo: Repository<UserLocationMembership>,
     private readonly courtsService: CourtsService,
     private readonly coachesService: CoachesService,
+    private readonly locationsService: LocationsService,
     @InjectDataSource()
     private readonly dataSource: DataSource,
   ) {}
@@ -243,18 +242,11 @@ export class CourtBookingHandler implements IBookingHandler {
 
     let membership: UserLocationMembership | null = null;
     if (location.visibility === LocationVisibility.PRIVATE) {
-      membership = await this.membershipRepo.findOne({
-        where: {
-          userId: p.userId,
-          locationId: location.id,
-          status: MembershipStatus.ACTIVE,
-        },
-      });
-      if (!membership) {
-        throw new ForbiddenException(
-          "An active membership is required to book courts at this private location",
+      membership =
+        await this.locationsService.requirePrivateVenueMembershipForBooking(
+          p.userId,
+          location.id,
         );
-      }
     }
 
     const pricingTier =
@@ -459,18 +451,11 @@ export class CourtBookingHandler implements IBookingHandler {
 
     let membership: UserLocationMembership | null = null;
     if (loc.visibility === LocationVisibility.PRIVATE) {
-      membership = await this.membershipRepo.findOne({
-        where: {
+      membership =
+        await this.locationsService.requirePrivateVenueMembershipForBooking(
           userId,
-          locationId: loc.id,
-          status: MembershipStatus.ACTIVE,
-        },
-      });
-      if (!membership) {
-        throw new ForbiddenException(
-          "An active membership is required to book courts at this private location",
+          loc.id,
         );
-      }
     }
 
     const pricingTier =

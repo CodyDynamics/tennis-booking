@@ -8,8 +8,11 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Brackets, Repository } from "typeorm";
 import * as bcrypt from "bcrypt";
 import { User } from "./entities/user.entity";
+import { UserAccountType } from "./entities/user-account-type.enum";
 import { CreateUserDto } from "./dto/create-user.dto";
+import { CreateMembershipPlaceholderDto } from "./dto/create-membership-placeholder.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
+import { RolesService } from "../roles/roles.service";
 import { UserLocationMembership } from "../memberships/entities/user-location-membership.entity";
 import { MembershipStatus } from "../memberships/entities/membership.enums";
 import { Location } from "../locations/entities/location.entity";
@@ -49,6 +52,7 @@ export class UsersService {
     private locationRepo: Repository<Location>,
     @InjectRepository(Area)
     private areaRepo: Repository<Area>,
+    private rolesService: RolesService,
   ) {}
 
   private async memberLocationIdsForUser(userId: string): Promise<string[]> {
@@ -90,6 +94,8 @@ export class UsersService {
     noMembershipAnywhere?: boolean,
     membershipAtLocationId?: string,
     areaId?: string,
+    accountType?: string,
+    excludeAccountType?: string,
     requester?: UserRequesterScope,
   ) {
     let membershipFilterLocationId: string | undefined;
@@ -228,6 +234,15 @@ export class UsersService {
         { q: `%${search.trim().toLowerCase()}%` },
       );
     }
+    if (accountType?.trim()) {
+      qb.andWhere("user.accountType = :accountTypeFilter", {
+        accountTypeFilter: accountType.trim(),
+      });
+    } else if (excludeAccountType?.trim()) {
+      qb.andWhere("user.accountType != :excludeAccountTypeFilter", {
+        excludeAccountTypeFilter: excludeAccountType.trim(),
+      });
+    }
     const list = await qb.getMany();
     return list.map(sanitizeUser);
   }
@@ -297,6 +312,69 @@ export class UsersService {
     });
   }
 
+  /** Pre-approved membership row (no password until user completes /register). */
+  async createMembershipPlaceholder(
+    dto: CreateMembershipPlaceholderDto,
+    requester?: UserRequesterScope,
+  ) {
+    const email = dto.email.trim().toLowerCase();
+    const existing = await this.userRepo.findOne({ where: { email } });
+    if (existing) {
+      throw new BadRequestException("User with this email already exists");
+    }
+    if (requester?.role === "super_user") {
+      const my = await this.memberLocationIdsForUser(requester.id);
+      if (my.length === 0) {
+        throw new ForbiddenException("No location scope for this account");
+      }
+      if (dto.membershipLocationId && !my.includes(dto.membershipLocationId)) {
+        throw new ForbiddenException(
+          "Cannot assign membership outside your locations",
+        );
+      }
+    }
+    const player = await this.rolesService.findByName("player");
+    if (!player) {
+      throw new BadRequestException("Default player role is missing");
+    }
+    const resolvedFirstName =
+      dto.firstName?.trim() || dto.fullName.trim().split(/\s+/)[0] || null;
+    const resolvedLastName =
+      dto.lastName?.trim() ||
+      (dto.fullName.trim().split(/\s+/).slice(1).join(" ").trim() || null);
+    const user = await this.userRepo.save(
+      this.userRepo.create({
+        email,
+        passwordHash: null,
+        fullName: dto.fullName.trim(),
+        firstName: resolvedFirstName,
+        lastName: resolvedLastName,
+        phone: dto.phone,
+        homeAddress: dto.homeAddress ?? null,
+        organizationId: dto.organizationId ?? null,
+        branchId: dto.branchId ?? null,
+        roleId: player.id,
+        accountType: UserAccountType.MEMBERSHIP,
+        status: "active",
+        visibility: "public",
+      }),
+    );
+    if (dto.membershipLocationId) {
+      await this.membershipRepo.save(
+        this.membershipRepo.create({
+          userId: user.id,
+          locationId: dto.membershipLocationId,
+          status: MembershipStatus.PENDING_PAYMENT,
+        }),
+      );
+    }
+    const withRole = await this.userRepo.findOne({
+      where: { id: user.id },
+      relations: ["role"],
+    });
+    return sanitizeUser(withRole!);
+  }
+
   async create(dto: CreateUserDto, requester?: UserRequesterScope) {
     const existing = await this.userRepo.findOne({
       where: { email: dto.email },
@@ -314,6 +392,16 @@ export class UsersService {
       }
     }
     const passwordHash = await bcrypt.hash(dto.password, 10);
+    const roleEntity = await this.rolesService.findOne(dto.roleId);
+    const staffRoleNames = new Set([
+      "super_admin",
+      "admin",
+      "super_user",
+      "coach",
+    ]);
+    const accountType = staffRoleNames.has(roleEntity.name)
+      ? UserAccountType.SYSTEM
+      : UserAccountType.NORMAL;
     const user = await this.userRepo.save(
       this.userRepo.create({
         email: dto.email,
@@ -327,6 +415,7 @@ export class UsersService {
         branchId: dto.branchId ?? null,
         roleId: dto.roleId,
         mustChangePasswordOnFirstLogin: dto.mustChangePasswordOnFirstLogin ?? false,
+        accountType,
       }),
     );
     if (dto.membershipLocationId) {
@@ -371,6 +460,7 @@ export class UsersService {
       ...(dto.mustChangePasswordOnFirstLogin !== undefined && {
         mustChangePasswordOnFirstLogin: dto.mustChangePasswordOnFirstLogin,
       }),
+      ...(dto.accountType !== undefined && { accountType: dto.accountType }),
     };
     if (dto.password) {
       updates.passwordHash = await bcrypt.hash(dto.password, 10);

@@ -24,6 +24,7 @@ import { JwtAuthGuard, PermissionsGuard, RequirePermission } from "@app/common";
 import { CurrentUser } from "@app/common";
 import { UsersService } from "./users.service";
 import { CreateUserDto } from "./dto/create-user.dto";
+import { CreateMembershipPlaceholderDto } from "./dto/create-membership-placeholder.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 
 @ApiTags("Users")
@@ -80,6 +81,17 @@ export class UsersController {
     description:
       "Same as filtering by that area's locationId (membership at parent location child).",
   })
+  @ApiQuery({
+    name: "accountType",
+    required: false,
+    description: "Filter by user.accountType: system | normal | membership",
+  })
+  @ApiQuery({
+    name: "excludeAccountType",
+    required: false,
+    description:
+      "Exclude this accountType (e.g. membership) — useful for the main Users list without placeholders.",
+  })
   @ApiResponse({ status: 200, description: "Array of users" })
   async findAll(
     @CurrentUser() requester: { id: string; role?: string | null },
@@ -91,6 +103,8 @@ export class UsersController {
     @Query("noMembershipAnywhere") noMembershipAnywhere?: string,
     @Query("membershipAtLocationId") membershipAtLocationId?: string,
     @Query("areaId") areaId?: string,
+    @Query("accountType") accountType?: string,
+    @Query("excludeAccountType") excludeAccountType?: string,
   ) {
     return this.usersService.findAll(
       roleId,
@@ -101,6 +115,8 @@ export class UsersController {
       noMembershipAnywhere === "true" || noMembershipAnywhere === "1",
       membershipAtLocationId?.trim() || undefined,
       areaId?.trim() || undefined,
+      accountType?.trim() || undefined,
+      excludeAccountType?.trim() || undefined,
       { id: requester.id, role: requester.role ?? null },
     );
   }
@@ -141,6 +157,26 @@ export class UsersController {
       includeMemberships === "true" || includeMemberships === "1",
       { id: requester.id, role: requester.role ?? null },
     );
+  }
+
+  @Post("membership-placeholder")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission("users:create")
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary:
+      "Pre-add membership user (email + phone, no password; user completes signup via /register)",
+  })
+  @ApiBody({ type: CreateMembershipPlaceholderDto })
+  @ApiResponse({ status: 201 })
+  async createMembershipPlaceholder(
+    @Body() dto: CreateMembershipPlaceholderDto,
+    @CurrentUser() requester: { id: string; role?: string | null },
+  ) {
+    return this.usersService.createMembershipPlaceholder(dto, {
+      id: requester.id,
+      role: requester.role ?? null,
+    });
   }
 
   @Post()

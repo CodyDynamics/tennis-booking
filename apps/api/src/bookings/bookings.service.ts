@@ -22,9 +22,8 @@ import { BookingKind } from "./interfaces/booking-handler.interface";
 import { Court } from "../courts/entities/court.entity";
 import { BookingMailService } from "../notifications/booking-mail.service";
 import { Area } from "../areas/entities/area.entity";
-import { UserLocationMembership } from "../memberships/entities/user-location-membership.entity";
-import { MembershipStatus } from "../memberships/entities/membership.enums";
 import { LocationVisibility } from "../locations/entities/location.enums";
+import { LocationsService } from "../locations/locations.service";
 
 /**
  * Booking Service (Parent / Facade).
@@ -39,12 +38,11 @@ export class BookingsService {
     private readonly coachSessionHandler: CoachSessionHandler,
     private readonly courtWizardAvailability: CourtWizardAvailabilityService,
     private readonly bookingMailService: BookingMailService,
+    private readonly locationsService: LocationsService,
     @InjectRepository(Court)
     private readonly courtRepo: Repository<Court>,
     @InjectRepository(Area)
     private readonly areaRepo: Repository<Area>,
-    @InjectRepository(UserLocationMembership)
-    private readonly membershipRepo: Repository<UserLocationMembership>,
   ) {}
 
   private async assertAreaAccess(userId: string, locationId: string, areaId?: string) {
@@ -54,16 +52,12 @@ export class BookingsService {
       throw new BadRequestException("Area is invalid for this location");
     }
     if (area.visibility === LocationVisibility.PRIVATE) {
-      const membership = await this.membershipRepo.findOne({
-        where: { userId, locationId },
-      });
-      const canAccess =
-        !!membership &&
-        [MembershipStatus.ACTIVE, MembershipStatus.GRACE, MembershipStatus.PENDING_PAYMENT].includes(
-          membership.status,
-        );
-      if (!canAccess) {
-        throw new ForbiddenException("This area requires an active membership");
+      const ok = await this.locationsService.canAccessPrivateVenue(
+        userId,
+        locationId,
+      );
+      if (!ok) {
+        throw new ForbiddenException("This area requires a venue membership");
       }
     }
   }

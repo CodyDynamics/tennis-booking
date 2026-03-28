@@ -25,6 +25,26 @@ export class EmailService {
     // Don't throw error to prevent revealing if email exists
   }
 
+  async sendRegistrationOtpEmail(to: string, otp: string) {
+    const ok = await this.mailSender.sendHtml({
+      to,
+      subject: "Verify your email to complete registration",
+      html: `
+          <h2>Complete your registration</h2>
+          <p>Your verification code is:</p>
+          <p style="font-size:24px;font-weight:bold;letter-spacing:4px;">${otp}</p>
+          <p>This code expires in a few minutes. Do not share it with anyone.</p>
+          <p>If you didn&apos;t sign up, you can ignore this email.</p>
+        `,
+    });
+    if (ok) {
+      this.logger.log(`Registration OTP email sent to ${to}`);
+    } else {
+      this.logger.error(`Failed to send registration OTP email to ${to}`);
+      throw new Error("Failed to send registration OTP email");
+    }
+  }
+
   async sendLoginOtpEmail(to: string, otp: string) {
     const ok = await this.mailSender.sendHtml({
       to,

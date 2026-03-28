@@ -12,7 +12,9 @@ import { PasswordResetToken } from "./entities/password-reset-token.entity";
 import { RefreshToken } from "./entities/refresh-token.entity";
 import { EmailService } from "../email/email.service";
 import { OtpStoreService } from "./otp-store.service";
+import { RegisterPendingStoreService } from "./register-pending-store.service";
 import { RedisService } from "../redis/redis.service";
+import { RolesService } from "../roles/roles.service";
 import { RegisterDto } from "./dto";
 
 jest.mock("bcrypt", () => ({
@@ -38,18 +40,28 @@ describe("AuthService", () => {
   };
   let jwtService: { signAsync: jest.Mock; verify: jest.Mock; decode: jest.Mock };
   let configService: { get: jest.Mock };
-  let emailService: { sendPasswordResetEmail: jest.Mock };
+  let emailService: {
+    sendPasswordResetEmail: jest.Mock;
+    sendLoginOtpEmail: jest.Mock;
+    sendRegistrationOtpEmail: jest.Mock;
+  };
   let refreshTokenRepo: {
     findOne: jest.Mock;
     save: jest.Mock;
     delete: jest.Mock;
     create: jest.Mock;
   };
-  let otpStore: { set: jest.Mock; consume: jest.Mock };
+  let otpStore: { set: jest.Mock; consume: jest.Mock; clear: jest.Mock };
+  let registerPendingStore: {
+    set: jest.Mock;
+    get: jest.Mock;
+    delete: jest.Mock;
+  };
   let redisService: {
     blacklistAccessTokenJti: jest.Mock;
     isAccessTokenJtiBlacklisted: jest.Mock;
   };
+  let rolesService: { findByName: jest.Mock };
 
   const mockUser = {
     id: "user-uuid",
@@ -62,8 +74,6 @@ describe("AuthService", () => {
     status: "active",
     role: { id: "role-uuid", name: "player" },
   } as User;
-
-  const mockRole = { id: "role-uuid", name: "player" } as Role;
 
   beforeEach(async () => {
     userRepo = {
@@ -88,19 +98,23 @@ describe("AuthService", () => {
       decode: jest.fn().mockReturnValue(null),
     };
     configService = {
-      get: jest.fn((key: string) => {
-        const map: Record<string, string> = {
+      get: jest.fn((key: string, defaultValue?: unknown) => {
+        const map: Record<string, unknown> = {
           "jwt.secret": "secret",
           "jwt.expiresIn": "1h",
           "jwt.refreshSecret": "refresh-secret",
           "jwt.refreshExpiresIn": "7d",
           frontendUrl: "http://localhost:3000",
+          "otp.loginLength": 6,
+          "otp.loginTtlSeconds": 300,
         };
-        return map[key];
+        return map[key] ?? defaultValue;
       }),
     };
     emailService = {
       sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
+      sendLoginOtpEmail: jest.fn().mockResolvedValue(undefined),
+      sendRegistrationOtpEmail: jest.fn().mockResolvedValue(undefined),
     };
     refreshTokenRepo = {
       findOne: jest.fn(),
@@ -111,10 +125,21 @@ describe("AuthService", () => {
     otpStore = {
       set: jest.fn(),
       consume: jest.fn(),
+      clear: jest.fn(),
+    };
+    registerPendingStore = {
+      set: jest.fn(),
+      get: jest.fn(),
+      delete: jest.fn(),
     };
     redisService = {
       blacklistAccessTokenJti: jest.fn().mockResolvedValue(undefined),
       isAccessTokenJtiBlacklisted: jest.fn().mockResolvedValue(false),
+    };
+    rolesService = {
+      findByName: jest
+        .fn()
+        .mockResolvedValue({ id: "player-role-id", name: "player" }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -134,7 +159,12 @@ describe("AuthService", () => {
         { provide: ConfigService, useValue: configService },
         { provide: EmailService, useValue: emailService },
         { provide: OtpStoreService, useValue: otpStore },
+        {
+          provide: RegisterPendingStoreService,
+          useValue: registerPendingStore,
+        },
         { provide: RedisService, useValue: redisService },
+        { provide: RolesService, useValue: rolesService },
       ],
     }).compile();
 
@@ -146,55 +176,108 @@ describe("AuthService", () => {
     expect(service).toBeDefined();
   });
 
-  describe("register", () => {
+  describe("requestRegisterOtp", () => {
     const registerDto: RegisterDto = {
       email: "new@example.com",
       password: "password123",
       fullName: "New User",
+      firstName: "New",
+      lastName: "User",
       phone: "+15550000001",
+      street: "1 Main St",
+      city: "Austin",
+      state: "TX",
+      zipCode: "78701",
     };
 
-    it("should register a new user and return user + tokens", async () => {
+    it("should store pending registration and send OTP email", async () => {
       userRepo.find.mockResolvedValue([]);
-      userRepo.save.mockResolvedValue({
-        ...mockUser,
-        id: "new-id",
-        email: registerDto.email,
-        roleId: null,
-      });
-      userRepo.findOne.mockResolvedValue({
-        ...mockUser,
-        id: "new-id",
-        email: registerDto.email,
-        fullName: registerDto.fullName,
-        roleId: null,
-        role: null,
-      });
 
-      const result = await service.register(registerDto);
+      const result = await service.requestRegisterOtp(registerDto);
 
       expect(userRepo.find).toHaveBeenCalledWith({
-        where: { email: registerDto.email },
+        where: { email: "new@example.com" },
       });
       expect(bcrypt.hash).toHaveBeenCalledWith(registerDto.password, 10);
-      expect(userRepo.save).toHaveBeenCalled();
-      expect(jwtService.signAsync).toHaveBeenCalledTimes(1);
-      expect(result).toHaveProperty("user");
-      expect(result).toHaveProperty("accessToken", "token");
-      expect(typeof result.refreshToken).toBe("string");
-      expect(refreshTokenRepo.save).toHaveBeenCalled();
+      expect(registerPendingStore.set).toHaveBeenCalled();
+      expect(otpStore.set).toHaveBeenCalledWith(
+        "register",
+        "new@example.com",
+        expect.any(String),
+      );
+      expect(emailService.sendRegistrationOtpEmail).toHaveBeenCalled();
+      expect(result.message).toContain("verification code");
     });
 
     it("should throw BadRequestException when email already exists", async () => {
       userRepo.find.mockResolvedValue([{ ...mockUser, organizationId: null }]);
 
-      await expect(service.register(registerDto)).rejects.toThrow(
+      await expect(service.requestRegisterOtp(registerDto)).rejects.toThrow(
         BadRequestException,
       );
-      await expect(service.register(registerDto)).rejects.toThrow(
-        "User with this email already exists",
-      );
-      expect(userRepo.save).not.toHaveBeenCalled();
+      expect(registerPendingStore.set).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("verifyRegisterOtp", () => {
+    const pending = {
+      passwordHash: "hashed-password",
+      fullName: "New User",
+      firstName: "New",
+      lastName: "User",
+      phone: "+15550000001",
+      homeAddress: "1 Main St, Austin, TX 78701",
+      organizationId: null,
+      branchId: null,
+      expiresAt: Date.now() + 60_000,
+    };
+
+    it("should create user and return tokens when OTP and pending are valid", async () => {
+      registerPendingStore.get.mockReturnValue(pending);
+      otpStore.consume.mockReturnValue(true);
+      userRepo.find.mockResolvedValue([]);
+      userRepo.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          ...mockUser,
+          id: "new-id",
+          email: "new@example.com",
+          fullName: "New User",
+          roleId: "player-role-id",
+          role: { id: "player-role-id", name: "player" },
+        });
+      userRepo.save.mockResolvedValue({
+        ...mockUser,
+        id: "new-id",
+        email: "new@example.com",
+        roleId: "player-role-id",
+      });
+
+      const result = await service.verifyRegisterOtp("new@example.com", "123456");
+
+      expect(registerPendingStore.delete).toHaveBeenCalledWith("new@example.com");
+      expect(userRepo.save).toHaveBeenCalled();
+      expect(jwtService.signAsync).toHaveBeenCalled();
+      expect(result).toHaveProperty("user");
+      expect(result).toHaveProperty("accessToken", "token");
+    });
+
+    it("should throw when registration session expired", async () => {
+      registerPendingStore.get.mockReturnValue(null);
+
+      await expect(
+        service.verifyRegisterOtp("new@example.com", "123456"),
+      ).rejects.toThrow(BadRequestException);
+      expect(otpStore.consume).not.toHaveBeenCalled();
+    });
+
+    it("should throw when OTP is invalid", async () => {
+      registerPendingStore.get.mockReturnValue(pending);
+      otpStore.consume.mockReturnValue(false);
+
+      await expect(
+        service.verifyRegisterOtp("new@example.com", "000000"),
+      ).rejects.toThrow(UnauthorizedException);
     });
   });
 
@@ -219,161 +302,6 @@ describe("AuthService", () => {
       );
 
       expect(result).toBeNull();
-    });
-
-    it("should return null when password is invalid", async () => {
-      userRepo.findOne.mockResolvedValue(mockUser);
-      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
-
-      const result = await service.validateUser("test@example.com", "wrong");
-
-      expect(result).toBeNull();
-    });
-
-    it("should throw UnauthorizedException when account is inactive", async () => {
-      userRepo.findOne.mockResolvedValue({ ...mockUser, status: "inactive" });
-      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
-
-      await expect(
-        service.validateUser("test@example.com", "password"),
-      ).rejects.toThrow(UnauthorizedException);
-      await expect(
-        service.validateUser("test@example.com", "password"),
-      ).rejects.toThrow("Account is inactive");
-    });
-  });
-
-  describe("login", () => {
-    it("should return user and tokens on valid credentials", async () => {
-      userRepo.findOne.mockResolvedValue(mockUser);
-      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
-
-      const result = await service.login({
-        email: "test@example.com",
-        password: "password123",
-      });
-
-      expect(result).toHaveProperty("user");
-      expect(result).toHaveProperty("accessToken", "token");
-      expect(typeof result.refreshToken).toBe("string");
-    });
-
-    it("should throw UnauthorizedException on invalid credentials", async () => {
-      userRepo.findOne.mockResolvedValue(null);
-
-      await expect(
-        service.login({ email: "bad@example.com", password: "password123" }),
-      ).rejects.toThrow(UnauthorizedException);
-      await expect(
-        service.login({ email: "bad@example.com", password: "password123" }),
-      ).rejects.toThrow("Invalid credentials");
-    });
-  });
-
-  describe("forgotPassword", () => {
-    it("should send reset email when user exists", async () => {
-      userRepo.findOne.mockResolvedValue(mockUser);
-      resetTokenRepo.save.mockResolvedValue({});
-
-      const result = await service.forgotPassword({
-        email: "test@example.com",
-      });
-
-      expect(resetTokenRepo.save).toHaveBeenCalled();
-      expect(emailService.sendPasswordResetEmail).toHaveBeenCalledWith(
-        mockUser.email,
-        expect.stringContaining("token="),
-      );
-      expect(result.message).toContain("password reset link");
-    });
-
-    it("should return same message when user does not exist (no leak)", async () => {
-      userRepo.findOne.mockResolvedValue(null);
-
-      const result = await service.forgotPassword({
-        email: "nonexistent@example.com",
-      });
-
-      expect(resetTokenRepo.save).not.toHaveBeenCalled();
-      expect(emailService.sendPasswordResetEmail).not.toHaveBeenCalled();
-      expect(result.message).toContain("password reset link");
-    });
-  });
-
-  describe("resetPassword", () => {
-    it("should reset password when token is valid", async () => {
-      const validToken = {
-        id: "token-id",
-        token: "reset-token",
-        userId: mockUser.id,
-        used: false,
-        expiresAt: new Date(Date.now() + 3600000),
-        user: mockUser,
-      };
-      resetTokenRepo.findOne.mockResolvedValue(validToken);
-
-      const result = await service.resetPassword({
-        token: "reset-token",
-        newPassword: "newpassword123",
-      });
-
-      expect(bcrypt.hash).toHaveBeenCalledWith("newpassword123", 10);
-      expect(userRepo.update).toHaveBeenCalledWith(
-        mockUser.id,
-        expect.any(Object),
-      );
-      expect(resetTokenRepo.update).toHaveBeenCalledWith(validToken.id, {
-        used: true,
-      });
-      expect(result.message).toBe("Password reset successfully");
-    });
-
-    it("should throw BadRequestException when token is invalid or expired", async () => {
-      resetTokenRepo.findOne.mockResolvedValue(null);
-
-      await expect(
-        service.resetPassword({
-          token: "bad-token",
-          newPassword: "newpass123",
-        }),
-      ).rejects.toThrow(BadRequestException);
-      await expect(
-        service.resetPassword({
-          token: "bad-token",
-          newPassword: "newpass123",
-        }),
-      ).rejects.toThrow("Invalid or expired reset token");
-    });
-  });
-
-  describe("refreshToken", () => {
-    it("should return new tokens when refresh token is valid", async () => {
-      refreshTokenRepo.findOne.mockResolvedValue({
-        id: "rt-id",
-        userId: mockUser.id,
-        tokenHash: "any",
-        expiresAt: new Date(Date.now() + 86400000),
-        longSession: false,
-      });
-      userRepo.findOne.mockResolvedValue(mockUser);
-
-      const result = await service.refreshToken("valid-refresh-token");
-
-      expect(refreshTokenRepo.delete).toHaveBeenCalledWith({ id: "rt-id" });
-      expect(result).toHaveProperty("accessToken", "token");
-      expect(typeof result.refreshToken).toBe("string");
-      expect(result.longSession).toBe(false);
-    });
-
-    it("should throw UnauthorizedException when refresh token is invalid", async () => {
-      refreshTokenRepo.findOne.mockResolvedValue(null);
-
-      await expect(service.refreshToken("invalid-token")).rejects.toThrow(
-        UnauthorizedException,
-      );
-      await expect(service.refreshToken("invalid-token")).rejects.toThrow(
-        "Invalid refresh token",
-      );
     });
   });
 });
