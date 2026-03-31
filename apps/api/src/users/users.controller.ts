@@ -95,6 +95,13 @@ export class UsersController {
     description:
       "Exclude this accountType (e.g. membership) — useful for the main Users list without placeholders.",
   })
+  @ApiQuery({
+    name: "includeMemberships",
+    required: false,
+    type: Boolean,
+    description:
+      "When true, each user includes `memberships` (id, locationId, status) for admin tables.",
+  })
   @ApiResponse({ status: 200, description: "Array of users" })
   async findAll(
     @CurrentUser() requester: { id: string; role?: string | null },
@@ -108,6 +115,7 @@ export class UsersController {
     @Query("areaId") areaId?: string,
     @Query("accountType") accountType?: string,
     @Query("excludeAccountType") excludeAccountType?: string,
+    @Query("includeMemberships") includeMemberships?: string,
   ) {
     return this.usersService.findAll(
       roleId,
@@ -120,6 +128,7 @@ export class UsersController {
       areaId?.trim() || undefined,
       accountType?.trim() || undefined,
       excludeAccountType?.trim() || undefined,
+      includeMemberships === "true" || includeMemberships === "1",
       { id: requester.id, role: requester.role ?? null },
     );
   }
