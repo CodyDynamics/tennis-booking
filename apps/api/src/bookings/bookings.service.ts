@@ -64,19 +64,12 @@ export class BookingsService {
 
   // ----- Court booking (sân, optional coach) -----
 
-  async createCourtBooking(
-    userId: string,
-    dto: CreateCourtBookingDto,
-    organizationId?: string | null,
-    branchId?: string | null,
-  ) {
+  async createCourtBooking(userId: string, dto: CreateCourtBookingDto) {
     const duration =
       dto.durationMinutes ??
       this.getDurationMinutes(dto.startTime, dto.endTime);
     const result = await this.courtBookingHandler.create({
       userId,
-      organizationId: organizationId ?? null,
-      branchId: branchId ?? null,
       courtId: dto.courtId,
       bookingDate: dto.bookingDate,
       startTime: dto.startTime,
@@ -142,24 +135,18 @@ export class BookingsService {
    * New booking flow: user picks a slot, system randomly assigns a free court.
    * Returns booking result + the assigned courtId (for internal reference).
    */
-  async createSlotBooking(
-    userId: string,
-    dto: CreateCourtSlotBookingDto,
-    organizationId?: string | null,
-    branchId?: string | null,
-  ) {
+  async createSlotBooking(userId: string, dto: CreateCourtSlotBookingDto) {
     await this.assertAreaAccess(userId, dto.locationId, dto.areaId);
-    // Find all active courts for location+sport+courtType(+optional area)
-    const courts = await this.courtRepo.find({
-      where: {
-        locationId: dto.locationId,
-        ...(dto.areaId ? { areaId: dto.areaId } : {}),
-        sport: dto.sport,
-        type: dto.courtType,
-        status: "active",
-      },
-      order: { name: "ASC" },
-    });
+    const qb = this.courtRepo
+      .createQueryBuilder("c")
+      .where("c.locationId = :locationId", { locationId: dto.locationId })
+      .andWhere("c.type = :courtType", { courtType: dto.courtType })
+      .andWhere("c.status = :status", { status: "active" })
+      .andWhere(":sport = ANY(c.sports)", { sport: dto.sport.toLowerCase() });
+    if (dto.areaId) {
+      qb.andWhere("c.areaId = :areaId", { areaId: dto.areaId });
+    }
+    const courts = await qb.orderBy("c.name", "ASC").getMany();
 
     if (courts.length === 0) {
       throw new ConflictException("No courts available for this location, sport, and court type.");
@@ -190,14 +177,13 @@ export class BookingsService {
     const duration = dto.durationMinutes ?? this.getDurationMinutes(dto.startTime, dto.endTime);
     const result = await this.courtBookingHandler.create({
       userId,
-      organizationId: organizationId ?? null,
-      branchId: branchId ?? null,
       courtId: assignedCourtId,
       bookingDate: dto.bookingDate,
       startTime: dto.startTime,
       endTime: dto.endTime,
       coachId: dto.coachId,
       durationMinutes: duration,
+      sport: dto.sport,
     });
     void this.bookingMailService.sendBookingConfirmation(result.id, "created");
     return result;
@@ -249,16 +235,9 @@ export class BookingsService {
 
   // ----- Coach session (book coach only or with court) -----
 
-  async createCoachSession(
-    userId: string,
-    dto: CreateCoachSessionDto,
-    organizationId?: string | null,
-    branchId?: string | null,
-  ) {
+  async createCoachSession(userId: string, dto: CreateCoachSessionDto) {
     return this.coachSessionHandler.create({
       userId,
-      organizationId: organizationId ?? null,
-      branchId: branchId ?? null,
       coachId: dto.coachId,
       sessionDate: dto.sessionDate,
       startTime: dto.startTime,

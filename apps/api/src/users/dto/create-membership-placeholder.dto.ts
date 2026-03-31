@@ -32,16 +32,6 @@ export class CreateMembershipPlaceholderDto {
   @IsString()
   homeAddress?: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUUID()
-  organizationId?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUUID()
-  branchId?: string;
-
   @ApiPropertyOptional({ description: "Optional venue (child location) membership" })
   @IsOptional()
   @IsUUID()

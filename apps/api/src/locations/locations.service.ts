@@ -175,16 +175,10 @@ export class LocationsService {
   }
 
   async create(dto: CreateLocationDto) {
-    return this.locationRepo.save(
-      this.locationRepo.create({
-        ...dto,
-        branchId: dto.branchId ?? null,
-      }),
-    );
+    return this.locationRepo.save(this.locationRepo.create({ ...dto }));
   }
 
   async findAll(
-    branchId?: string,
     parentLocationId?: string,
     kind?: string,
     pageIndex = 0,
@@ -193,9 +187,6 @@ export class LocationsService {
     const qb = this.locationRepo
       .createQueryBuilder("location")
       .orderBy("location.name", "ASC");
-    if (branchId) {
-      qb.andWhere("location.branchId = :branchId", { branchId });
-    }
     if (parentLocationId) {
       qb.andWhere("location.parentLocationId = :parentLocationId", {
         parentLocationId,

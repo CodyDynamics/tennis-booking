@@ -49,14 +49,10 @@ export class CourtsController {
     summary:
       "List per-court booking windows (Court Time Slot). Empty until slots are configured for a court.",
   })
-  @ApiQuery({ name: "branchId", required: false })
   @ApiQuery({ name: "search", required: false })
   @ApiResponse({ status: 200 })
-  listBookingWindows(
-    @Query("branchId") branchId?: string,
-    @Query("search") search?: string,
-  ) {
-    return this.courtsService.listCourtBookingWindowsForAdmin(branchId, search);
+  listBookingWindows(@Query("search") search?: string) {
+    return this.courtsService.listCourtBookingWindowsForAdmin(search);
   }
 
   @Delete("booking-windows/:windowId")
@@ -73,23 +69,23 @@ export class CourtsController {
   }
 
   @Get()
-  @ApiOperation({ summary: "List courts (filter by locationId, branchId, status, search, sport)" })
+  @ApiOperation({ summary: "List courts (filter by locationId, status, search, sport)" })
   @ApiQuery({ name: "locationId", required: false })
-  @ApiQuery({ name: "branchId", required: false, description: "Filter by branch (courts in locations of this branch)" })
   @ApiQuery({ name: "status", required: false, enum: ["active", "maintenance"] })
   @ApiQuery({ name: "search", required: false, description: "Search by court name" })
-  @ApiQuery({ name: "sport", required: false, enum: ["tennis", "pickleball"] })
-  @ApiQuery({ name: "sportId", required: false })
+  @ApiQuery({
+    name: "sport",
+    required: false,
+    description: "Court supports this sport (multi-sport courts match any)",
+  })
   @ApiQuery({ name: "page", required: false, description: "Page index (0-based)" })
   @ApiQuery({ name: "pageSize", required: false, description: "Page size (max 1000, default 500)" })
   @ApiResponse({ status: 200, description: "Paginated list: total, data, paginationInfo" })
   findAll(
     @Query("locationId") locationId?: string,
-    @Query("branchId") branchId?: string,
     @Query("status") status?: string,
     @Query("search") search?: string,
     @Query("sport") sport?: string,
-    @Query("sportId") sportId?: string,
     @Query("page") page?: string,
     @Query("pageSize") pageSize?: string,
   ) {
@@ -100,11 +96,9 @@ export class CourtsController {
     );
     return this.courtsService.findAll(
       locationId,
-      branchId,
       status,
       search,
       sport,
-      sportId,
       pageIndex,
       size,
     );

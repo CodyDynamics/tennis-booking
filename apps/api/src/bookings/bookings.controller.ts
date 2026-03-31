@@ -88,14 +88,9 @@ export class BookingsController {
   @ApiResponse({ status: 409, description: "All courts taken for this slot" })
   createSlotBooking(
     @Body() dto: CreateCourtSlotBookingDto,
-    @CurrentUser() user: { id: string; organizationId?: string; branchId?: string },
+    @CurrentUser() user: { id: string },
   ) {
-    return this.bookingsService.createSlotBooking(
-      user.id,
-      dto,
-      user.organizationId,
-      user.branchId,
-    );
+    return this.bookingsService.createSlotBooking(user.id, dto);
   }
 
   @Patch("court/slot/:bookingId")
@@ -123,14 +118,9 @@ export class BookingsController {
   @ApiResponse({ status: 400, description: "Court not available or invalid data" })
   createCourtBooking(
     @Body() dto: CreateCourtBookingDto,
-    @CurrentUser() user: { id: string; organizationId?: string; branchId?: string },
+    @CurrentUser() user: { id: string },
   ) {
-    return this.bookingsService.createCourtBooking(
-      user.id,
-      dto,
-      user.organizationId,
-      user.branchId,
-    );
+    return this.bookingsService.createCourtBooking(user.id, dto);
   }
 
   @Get("court/availability")
@@ -160,14 +150,9 @@ export class BookingsController {
   @ApiResponse({ status: 400, description: "Coach not available or invalid data" })
   createCoachSession(
     @Body() dto: CreateCoachSessionDto,
-    @CurrentUser() user: { id: string; organizationId?: string; branchId?: string },
+    @CurrentUser() user: { id: string },
   ) {
-    return this.bookingsService.createCoachSession(
-      user.id,
-      dto,
-      user.organizationId,
-      user.branchId,
-    );
+    return this.bookingsService.createCoachSession(user.id, dto);
   }
 
   @Get("my")

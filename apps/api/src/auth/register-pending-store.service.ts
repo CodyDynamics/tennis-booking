@@ -8,8 +8,6 @@ export interface PendingRegisterPayload {
   lastName: string | null;
   phone: string;
   homeAddress: string | null;
-  organizationId?: string | null;
-  branchId?: string | null;
   expiresAt: number;
 }
 

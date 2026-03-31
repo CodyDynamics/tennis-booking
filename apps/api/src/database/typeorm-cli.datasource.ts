@@ -5,8 +5,6 @@ import { User } from "../users/entities/user.entity";
 import { Role } from "../roles/entities/role.entity";
 import { PasswordResetToken } from "../auth/entities/password-reset-token.entity";
 import { RefreshToken } from "../auth/entities/refresh-token.entity";
-import { Branch } from "../branches/entities/branch.entity";
-import { Organization } from "../organizations/entities/organization.entity";
 import { Location } from "../locations/entities/location.entity";
 import { LocationBookingWindow } from "../locations/entities/location-booking-window.entity";
 import { Area } from "../areas/entities/area.entity";
@@ -37,8 +35,6 @@ export default new DataSource({
     Role,
     PasswordResetToken,
     RefreshToken,
-    Branch,
-    Organization,
     Location,
     LocationBookingWindow,
     Area,

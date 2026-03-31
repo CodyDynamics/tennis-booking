@@ -388,8 +388,6 @@ export class UsersService {
         lastName: resolvedLastName,
         phone: dto.phone,
         homeAddress: dto.homeAddress ?? null,
-        organizationId: dto.organizationId ?? null,
-        branchId: dto.branchId ?? null,
         roleId: player.id,
         accountType: UserAccountType.MEMBERSHIP,
         status: "active",
@@ -450,8 +448,6 @@ export class UsersService {
         lastName: dto.lastName ?? null,
         phone: dto.phone,
         homeAddress: dto.homeAddress ?? null,
-        organizationId: dto.organizationId ?? null,
-        branchId: dto.branchId ?? null,
         roleId: dto.roleId,
         mustChangePasswordOnFirstLogin:
           dto.mustChangePasswordOnFirstLogin ?? false,
@@ -498,10 +494,6 @@ export class UsersService {
       ...(dto.homeAddress !== undefined && {
         homeAddress: dto.homeAddress ?? null,
       }),
-      ...(dto.organizationId !== undefined && {
-        organizationId: dto.organizationId ?? null,
-      }),
-      ...(dto.branchId !== undefined && { branchId: dto.branchId ?? null }),
       ...(dto.roleId !== undefined && { roleId: dto.roleId }),
       ...(dto.status !== undefined && { status: dto.status }),
       ...(dto.mustChangePasswordOnFirstLogin !== undefined && {

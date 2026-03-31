@@ -9,7 +9,6 @@ import {
 } from "typeorm";
 import { Location } from "../../locations/entities/location.entity";
 import { Area } from "../../areas/entities/area.entity";
-import { Sport } from "../../sports/entities/sport.entity";
 
 @Entity("courts")
 export class Court {
@@ -22,17 +21,18 @@ export class Court {
   @Column({ type: "uuid", nullable: true })
   areaId: string | null;
 
-  @Column({ type: "uuid", nullable: true })
-  sportId: string | null;
-
   @Column()
   name: string;
 
   @Column({ type: "varchar", default: "outdoor" })
   type: string; // indoor | outdoor
 
-  @Column({ type: "varchar", default: "tennis" })
-  sport: string; // tennis | pickleball
+  /**
+   * Sports this physical court can be booked for (same slot grid / exclusivity).
+   * Postgres text[]; TypeORM maps to string[].
+   */
+  @Column({ type: "varchar", array: true, default: "{tennis}" })
+  sports: string[];
 
   /** Standard (walk-in / non-member) hourly rate */
   @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })
@@ -75,8 +75,4 @@ export class Court {
   @ManyToOne(() => Area, { onDelete: "SET NULL", nullable: true })
   @JoinColumn({ name: "areaId" })
   area: Area | null;
-
-  @ManyToOne(() => Sport, { onDelete: "SET NULL", nullable: true })
-  @JoinColumn({ name: "sportId" })
-  sportRef: Sport | null;
 }

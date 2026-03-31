@@ -8,7 +8,6 @@ import {
   JoinColumn,
   OneToMany,
 } from "typeorm";
-import { Branch } from "../../branches/entities/branch.entity";
 import {
   LocationVisibility,
   MemberCourtPriceBasis,
@@ -19,9 +18,6 @@ import { LocationKind } from "./location-kind.enum";
 export class Location {
   @PrimaryGeneratedColumn("uuid")
   id: string;
-
-  @Column({ type: "uuid", nullable: true })
-  branchId: string | null;
 
   @Column({ type: "uuid", nullable: true })
   parentLocationId: string | null;
@@ -83,10 +79,6 @@ export class Location {
 
   @UpdateDateColumn()
   updatedAt: Date;
-
-  @ManyToOne(() => Branch, { onDelete: "CASCADE", nullable: true })
-  @JoinColumn({ name: "branchId" })
-  branch: Branch | null;
 
   @ManyToOne(() => Location, { onDelete: "SET NULL", nullable: true })
   @JoinColumn({ name: "parentLocationId" })

@@ -13,8 +13,6 @@ export class AuthResponseDto {
     email: string;
     fullName: string;
     role?: string;
-    organizationId?: string;
-    branchId?: string;
     mustChangePasswordOnFirstLogin?: boolean;
   };
 }

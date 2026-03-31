@@ -249,15 +249,14 @@ export class CourtWizardAvailabilityService {
       );
     }
 
-    const courts = await this.courtRepo.find({
-      where: {
-        locationId,
-        sport,
-        type: courtType,
-        status: "active",
-      },
-      order: { name: "ASC" },
-    });
+    const courts = await this.courtRepo
+      .createQueryBuilder("c")
+      .where("c.locationId = :locationId", { locationId })
+      .andWhere("c.type = :courtType", { courtType })
+      .andWhere("c.status = :status", { status: "active" })
+      .andWhere(":sport = ANY(c.sports)", { sport: sport.toLowerCase() })
+      .orderBy("c.name", "ASC")
+      .getMany();
 
     const dateStr = bookingDate.slice(0, 10);
     const todayYmd = ymdTodayInIanaTimeZone(location.timezone);
@@ -366,7 +365,7 @@ export class CourtWizardAvailabilityService {
         id: c.id,
         name: c.name,
         type: c.type,
-        sport: c.sport,
+        sport: c.sports?.[0] ?? "tennis",
         status: c.status,
         pricePerHourPublic: c.pricePerHourPublic,
       })),
@@ -409,16 +408,16 @@ export class CourtWizardAvailabilityService {
       throw new BadRequestException("Cannot load availability for a past date at this venue");
     }
 
-    const courts = await this.courtRepo.find({
-      where: {
-        locationId,
-        ...(areaId ? { areaId } : {}),
-        sport,
-        type: courtType,
-        status: "active",
-      },
-      order: { name: "ASC" },
-    });
+    const qb = this.courtRepo
+      .createQueryBuilder("c")
+      .where("c.locationId = :locationId", { locationId })
+      .andWhere("c.type = :courtType", { courtType })
+      .andWhere("c.status = :status", { status: "active" })
+      .andWhere(":sport = ANY(c.sports)", { sport: sport.toLowerCase() });
+    if (areaId) {
+      qb.andWhere("c.areaId = :areaId", { areaId });
+    }
+    const courts = await qb.orderBy("c.name", "ASC").getMany();
 
     const totalCount = courts.length;
     if (totalCount === 0) {

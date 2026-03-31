@@ -76,12 +76,8 @@ export class AuthService {
   /** Allow OTP signup if email is new, or matches a membership placeholder (no password yet). */
   private async assertEmailAllowedForRegistrationRequest(
     email: string,
-    organizationId?: string | null,
   ): Promise<void> {
-    const byEmail = await this.userRepo.find({ where: { email } });
-    const existingUser = byEmail.find(
-      (u) => (organizationId || null) === (u.organizationId || null),
-    );
+    const existingUser = await this.userRepo.findOne({ where: { email } });
     if (!existingUser) return;
     if (
       existingUser.accountType === UserAccountType.MEMBERSHIP &&
@@ -107,14 +103,9 @@ export class AuthService {
       city,
       state,
       zipCode,
-      organizationId,
-      branchId,
     } = registerDto;
 
-    await this.assertEmailAllowedForRegistrationRequest(
-      email,
-      organizationId ?? null,
-    );
+    await this.assertEmailAllowedForRegistrationRequest(email);
 
     const passwordHash = await bcrypt.hash(password, 10);
     const resolvedFirstName =
@@ -131,8 +122,6 @@ export class AuthService {
       lastName: resolvedLastName,
       phone,
       homeAddress,
-      organizationId: organizationId ?? null,
-      branchId: branchId ?? null,
     });
 
     const length = this.configService.get<number>("otp.loginLength", 6);
@@ -193,10 +182,6 @@ export class AuthService {
           lastName: pending.lastName,
           phone: pending.phone,
           homeAddress: pending.homeAddress,
-          ...(pending.organizationId != null && {
-            organizationId: pending.organizationId,
-          }),
-          ...(pending.branchId != null && { branchId: pending.branchId }),
         });
         const userWithRole = await this.userRepo.findOne({
           where: { id: existing.id },
@@ -206,7 +191,6 @@ export class AuthService {
         const tokens = await this.generateTokens(
           userWithRole.id,
           userWithRole.email,
-          userWithRole.organizationId ?? undefined,
           userWithRole.roleId ?? undefined,
           { rememberMe: false },
         );
@@ -235,8 +219,6 @@ export class AuthService {
         lastName: pending.lastName,
         phone: pending.phone,
         homeAddress: pending.homeAddress,
-        organizationId: pending.organizationId ?? undefined,
-        branchId: pending.branchId ?? undefined,
         roleId: playerRole?.id ?? null,
         courtId: null,
         visibility: "public",
@@ -252,7 +234,6 @@ export class AuthService {
     const tokens = await this.generateTokens(
       userWithRole.id,
       userWithRole.email,
-      userWithRole.organizationId ?? undefined,
       userWithRole.roleId ?? undefined,
       { rememberMe: false },
     );
@@ -321,7 +302,6 @@ export class AuthService {
     const tokens = await this.generateTokens(
       user.id,
       user.email,
-      user.organizationId ?? undefined,
       user.roleId ?? undefined,
       { rememberMe: loginDto.rememberMe === true },
     );
@@ -384,7 +364,6 @@ export class AuthService {
     const tokens = await this.generateTokens(
       user.id,
       user.email,
-      user.organizationId ?? undefined,
       user.roleId,
       { rememberMe: false },
     );
@@ -496,7 +475,6 @@ export class AuthService {
     const tokens = await this.generateTokens(
       user.id,
       user.email,
-      user.organizationId ?? undefined,
       user.roleId,
       { rememberMe: rememberMe === true },
     );
@@ -538,7 +516,6 @@ export class AuthService {
     const tokens = await this.generateTokens(
       user.id,
       user.email,
-      user.organizationId ?? undefined,
       user.roleId ?? undefined,
       { rememberMe: row.longSession },
     );
@@ -592,7 +569,6 @@ export class AuthService {
   private async generateTokens(
     userId: string,
     email: string,
-    organizationId?: string,
     roleId?: string,
     options?: { rememberMe?: boolean },
   ) {
@@ -601,7 +577,6 @@ export class AuthService {
     const payload: JwtPayload = {
       sub: userId,
       email,
-      organizationId,
       roleId,
       jti,
     };
