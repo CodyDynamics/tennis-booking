@@ -5,7 +5,7 @@ import {
   ForbiddenException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Brackets, Repository } from "typeorm";
+import { Brackets, In, Repository } from "typeorm";
 import * as bcrypt from "bcrypt";
 import { User } from "./entities/user.entity";
 import { UserAccountType } from "./entities/user-account-type.enum";
@@ -99,6 +99,7 @@ export class UsersService {
     areaId?: string,
     accountType?: string,
     excludeAccountType?: string,
+    includeMemberships?: boolean,
     requester?: UserRequesterScope,
   ) {
     let membershipFilterLocationId: string | undefined;
@@ -278,7 +279,28 @@ export class UsersService {
       });
     }
     const list = await qb.getMany();
-    return list.map(sanitizeUser);
+    const sanitized = list.map(sanitizeUser);
+    if (!includeMemberships || sanitized.length === 0) return sanitized;
+
+    const ids = sanitized.map((u) => u.id);
+    const rows = await this.membershipRepo.find({
+      where: { userId: In(ids) },
+      order: { locationId: "ASC" },
+    });
+    const byUser = new Map<string, UserLocationMembership[]>();
+    for (const m of rows) {
+      const arr = byUser.get(m.userId) ?? [];
+      arr.push(m);
+      byUser.set(m.userId, arr);
+    }
+    return sanitized.map((u) => ({
+      ...u,
+      memberships: (byUser.get(u.id) ?? []).map((m) => ({
+        id: m.id,
+        locationId: m.locationId,
+        status: m.status,
+      })),
+    }));
   }
 
   /**
