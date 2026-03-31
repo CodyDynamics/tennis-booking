@@ -33,7 +33,7 @@ const DEFAULT_ROLES = [
     description:
       "Location operator: users, memberships, courts for assigned location(s) only",
     permissions:
-      "dashboard:view,memberships:view,users:view,users:create,users:update,users:delete,courts:view,courts:create,courts:update,courts:delete,bookings:view,areas:view,areas:create,areas:update,areas:delete",
+      "dashboard:view,memberships:view,users:view,users:create,users:update,users:delete,courts:view,courts:create,courts:update,courts:delete,bookings:view,bookings:update,areas:view,areas:create,areas:update,areas:delete",
   },
   {
     name: "admin",

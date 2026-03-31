@@ -29,6 +29,9 @@ import {
 } from "./dto/court-wizard-query.dto";
 import { JwtAuthGuard } from "@app/common";
 import { CurrentUser } from "@app/common";
+import { PermissionsGuard, RequirePermission } from "@app/common";
+import { AdminListCourtBookingsQueryDto } from "./dto/admin-list-court-bookings.query.dto";
+import { AdminUpdateCourtBookingDto } from "./dto/admin-update-court-booking.dto";
 
 @ApiTags("Bookings")
 @Controller("bookings")
@@ -199,5 +202,28 @@ export class BookingsController {
     @CurrentUser() user: { id: string },
   ) {
     return this.bookingsService.cancelBooking(id, kind, user.id);
+  }
+
+  // ----- Admin -----
+
+  @Get("admin/court")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission("bookings:view")
+  @ApiBearerAuth("JWT")
+  @ApiOperation({ summary: "Admin: list all court bookings" })
+  adminListCourt(@Query() query: AdminListCourtBookingsQueryDto) {
+    return this.bookingsService.adminListCourtBookings(query);
+  }
+
+  @Patch("admin/court/:id")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission("bookings:update")
+  @ApiBearerAuth("JWT")
+  @ApiOperation({ summary: "Admin: update court booking status/paymentStatus" })
+  adminUpdateCourt(
+    @Param("id") id: string,
+    @Body() body: AdminUpdateCourtBookingDto,
+  ) {
+    return this.bookingsService.adminUpdateCourtBooking(id, body);
   }
 }

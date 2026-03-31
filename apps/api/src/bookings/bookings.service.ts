@@ -24,6 +24,10 @@ import { BookingMailService } from "../notifications/booking-mail.service";
 import { Area } from "../areas/entities/area.entity";
 import { LocationVisibility } from "../locations/entities/location.enums";
 import { LocationsService } from "../locations/locations.service";
+import { CourtBooking } from "./entities/court-booking.entity";
+// (User/Location repos not needed yet; keep imports minimal)
+import { AdminListCourtBookingsQueryDto } from "./dto/admin-list-court-bookings.query.dto";
+import { AdminUpdateCourtBookingDto } from "./dto/admin-update-court-booking.dto";
 
 /**
  * Booking Service (Parent / Facade).
@@ -43,6 +47,8 @@ export class BookingsService {
     private readonly courtRepo: Repository<Court>,
     @InjectRepository(Area)
     private readonly areaRepo: Repository<Area>,
+    @InjectRepository(CourtBooking)
+    private readonly courtBookingRepo: Repository<CourtBooking>,
   ) {}
 
   private async assertAreaAccess(userId: string, locationId: string, areaId?: string) {
@@ -258,6 +264,51 @@ export class BookingsService {
     } else {
       await this.coachSessionHandler.cancel(bookingId, userId);
     }
+  }
+
+  // ----- Admin: list & update all court bookings -----
+
+  async adminListCourtBookings(q: AdminListCourtBookingsQueryDto) {
+    const qb = this.courtBookingRepo
+      .createQueryBuilder("b")
+      .leftJoinAndSelect("b.court", "court")
+      .leftJoinAndSelect("b.user", "user")
+      .leftJoinAndSelect("b.location", "location")
+      .orderBy("b.bookingDate", "DESC")
+      .addOrderBy("b.startTime", "DESC");
+
+    if (q.locationId) qb.andWhere("b.locationId = :locationId", { locationId: q.locationId });
+    if (q.status) qb.andWhere("b.bookingStatus = :st", { st: q.status });
+    if (q.paymentStatus) qb.andWhere("b.paymentStatus = :ps", { ps: q.paymentStatus });
+    if (q.from) qb.andWhere("b.bookingDate >= :from", { from: q.from });
+    if (q.to) qb.andWhere("b.bookingDate <= :to", { to: q.to });
+    if (q.search?.trim()) {
+      const s = `%${q.search.trim().toLowerCase()}%`;
+      qb.andWhere(
+        "(LOWER(user.email) LIKE :s OR LOWER(user.fullName) LIKE :s OR LOWER(court.name) LIKE :s)",
+        { s },
+      );
+    }
+
+    const data = await qb.getMany();
+    return data;
+  }
+
+  async adminUpdateCourtBooking(id: string, dto: AdminUpdateCourtBookingDto) {
+    const row = await this.courtBookingRepo.findOne({
+      where: { id },
+      relations: { court: true, user: true, location: true },
+    });
+    if (!row) throw new NotFoundException("Booking not found");
+
+    if (dto.bookingStatus !== undefined) {
+      row.bookingStatus = dto.bookingStatus as any;
+    }
+    if (dto.paymentStatus !== undefined) {
+      row.paymentStatus = dto.paymentStatus as any;
+    }
+    await this.courtBookingRepo.save(row);
+    return row;
   }
 
   async findBooking(bookingId: string, kind: BookingKind) {
