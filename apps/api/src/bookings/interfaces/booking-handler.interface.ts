@@ -31,8 +31,6 @@ export interface IBookingHandler {
 
 export interface CreateBookingParams {
   userId: string;
-  organizationId?: string | null;
-  branchId?: string | null;
   [key: string]: unknown;
 }
 

@@ -13,16 +13,10 @@ import { Court } from "../../courts/entities/court.entity";
 import { UserAccountType } from "./user-account-type.enum";
 
 @Entity("users")
-@Unique(["organizationId", "email"])
+@Unique(["email"])
 export class User {
   @PrimaryGeneratedColumn("uuid")
   id: string;
-
-  @Column({ type: "varchar", nullable: true })
-  organizationId: string | null;
-
-  @Column({ type: "varchar", nullable: true })
-  branchId: string | null;
 
   @Column({ type: "uuid", nullable: true })
   roleId: string | null;

@@ -15,8 +15,6 @@ import { User } from "./users/entities/user.entity";
 import { Role } from "./roles/entities/role.entity";
 import { PasswordResetToken } from "./auth/entities/password-reset-token.entity";
 import { RefreshToken } from "./auth/entities/refresh-token.entity";
-import { Branch } from "./branches/entities/branch.entity";
-import { Organization } from "./organizations/entities/organization.entity";
 import { Location } from "./locations/entities/location.entity";
 import { LocationBookingWindow } from "./locations/entities/location-booking-window.entity";
 import { Area } from "./areas/entities/area.entity";
@@ -29,13 +27,11 @@ import { CourtBooking } from "./bookings/entities/court-booking.entity";
 import { CoachSession } from "./bookings/entities/coach-session.entity";
 import { BookingCommand } from "./bookings/entities/booking-command.entity";
 
-import { BranchesModule } from "./branches/branches.module";
 import { AreasModule } from "./areas/areas.module";
 import { CourtsModule } from "./courts/courts.module";
 import { CoachesModule } from "./coaches/coaches.module";
 import { BookingsModule } from "./bookings/bookings.module";
 import { RolesModule } from "./roles/roles.module";
-import { OrganizationsModule } from "./organizations/organizations.module";
 import { SportsModule } from "./sports/sports.module";
 import { RedisModule } from "./redis/redis.module";
 import { AdminModule } from "./admin/admin.module";
@@ -65,8 +61,6 @@ import { NotificationsModule } from "./notifications/notifications.module";
           Role,
           PasswordResetToken,
           RefreshToken,
-          Branch,
-          Organization,
           Location,
           LocationBookingWindow,
           Area,
@@ -117,14 +111,12 @@ import { NotificationsModule } from "./notifications/notifications.module";
     UsersModule,
     RsaModule,
     HealthModule,
-    BranchesModule,
     AreasModule,
     CourtsModule,
     CoachesModule,
     NotificationsModule,
     BookingsModule,
     RolesModule,
-    OrganizationsModule,
     SportsModule,
     AdminModule,
   ],

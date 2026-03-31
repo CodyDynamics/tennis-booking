@@ -31,6 +31,7 @@ import {
 } from "../interfaces/booking-handler.interface";
 import { Location } from "../../locations/entities/location.entity";
 import { Court } from "../../courts/entities/court.entity";
+import { courtSupportsSport } from "../../courts/court-sports.util";
 import {
   wallClockMinutesNowInTimeZone,
   ymdTodayInIanaTimeZone,
@@ -45,6 +46,8 @@ export interface CourtBookingCreateParams extends CreateBookingParams {
   durationMinutes?: number;
   /** Optional: link row to `location_booking_windows` when using wizard flow */
   locationBookingWindowId?: string;
+  /** Activity booked (must be in court.sports when set) */
+  sport?: string;
 }
 
 function parseHourlyMemberRate(court: Court, location: Location): number {
@@ -240,6 +243,14 @@ export class CourtBookingHandler implements IBookingHandler {
       );
     }
 
+    const sportSnapshot =
+      p.sport?.trim().toLowerCase() ?? court.sports?.[0] ?? "tennis";
+    if (!courtSupportsSport(court, sportSnapshot)) {
+      throw new BadRequestException(
+        "This court is not configured for the selected sport",
+      );
+    }
+
     let membership: UserLocationMembership | null = null;
     if (location.visibility === LocationVisibility.PRIVATE) {
       membership =
@@ -288,10 +299,8 @@ export class CourtBookingHandler implements IBookingHandler {
       );
 
     const booking = this.courtBookingRepo.create({
-      organizationId: p.organizationId ?? null,
-      branchId: p.branchId ?? court.location?.branchId ?? null,
       locationId: location.id,
-      sport: court.sport,
+      sport: sportSnapshot,
       courtType: court.type,
       locationBookingWindowId: p.locationBookingWindowId ?? null,
       pricingTier,
@@ -382,16 +391,16 @@ export class CourtBookingHandler implements IBookingHandler {
     }
 
     const courtRepo = this.dataSource.getRepository(Court);
-    const courts = await courtRepo.find({
-      where: {
-        locationId: dto.locationId,
-        ...(dto.areaId ? { areaId: dto.areaId } : {}),
-        sport: dto.sport,
-        type: dto.courtType,
-        status: "active",
-      },
-      order: { name: "ASC" },
-    });
+    const qb = courtRepo
+      .createQueryBuilder("c")
+      .where("c.locationId = :locationId", { locationId: dto.locationId })
+      .andWhere("c.type = :courtType", { courtType: dto.courtType })
+      .andWhere("c.status = :status", { status: "active" })
+      .andWhere(":sport = ANY(c.sports)", { sport: dto.sport.toLowerCase() });
+    if (dto.areaId) {
+      qb.andWhere("c.areaId = :areaId", { areaId: dto.areaId });
+    }
+    const courts = await qb.orderBy("c.name", "ASC").getMany();
     if (courts.length === 0) {
       throw new ConflictException(
         "No courts available for this location, sport, and court type.",
@@ -487,7 +496,6 @@ export class CourtBookingHandler implements IBookingHandler {
         loc.timezone,
       );
 
-    booking.branchId = booking.branchId ?? court.location?.branchId ?? null;
     booking.locationId = loc.id;
     booking.sport = dto.sport;
     booking.courtType = dto.courtType;

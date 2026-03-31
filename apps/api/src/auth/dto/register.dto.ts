@@ -4,7 +4,6 @@ import {
   IsString,
   MinLength,
   IsOptional,
-  IsUUID,
   IsNotEmpty,
   MaxLength,
   Matches,
@@ -68,14 +67,4 @@ export class RegisterDto {
   @IsNotEmpty()
   @MaxLength(10)
   zipCode: string;
-
-  @ApiPropertyOptional({ description: "Organization UUID" })
-  @IsOptional()
-  @IsUUID()
-  organizationId?: string;
-
-  @ApiPropertyOptional({ description: "Branch UUID" })
-  @IsOptional()
-  @IsUUID()
-  branchId?: string;
 }

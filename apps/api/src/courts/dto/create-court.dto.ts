@@ -6,6 +6,8 @@ import {
   IsIn,
   Min,
   Matches,
+  IsArray,
+  ArrayMinSize,
 } from "class-validator";
 
 export class CreateCourtDto {
@@ -27,18 +29,26 @@ export class CreateCourtDto {
   @IsIn(["indoor", "outdoor"])
   type?: string;
 
+  /**
+   * Sports this court supports (shared scheduling). Prefer over legacy `sport`.
+   */
+  @ApiPropertyOptional({
+    type: [String],
+    example: ["tennis", "pickleball"],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsIn(["tennis", "pickleball", "ball-machine"], { each: true })
+  sports?: string[];
+
   @ApiPropertyOptional({
     enum: ["tennis", "pickleball", "ball-machine"],
-    default: "tennis",
+    description: "Deprecated: single sport; use `sports` for multiple",
   })
   @IsOptional()
   @IsIn(["tennis", "pickleball", "ball-machine"])
   sport?: string;
-
-  @ApiPropertyOptional({ description: "Sport UUID (preferred over sport code string)" })
-  @IsOptional()
-  @IsString()
-  sportId?: string;
 
   @ApiPropertyOptional({
     example: 20,

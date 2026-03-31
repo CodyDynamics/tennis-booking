@@ -3,8 +3,6 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, In } from "typeorm";
 import * as bcrypt from "bcrypt";
 import { Role } from "../roles/entities/role.entity";
-import { Organization } from "../organizations/entities/organization.entity";
-import { Branch } from "../branches/entities/branch.entity";
 import { Location } from "../locations/entities/location.entity";
 import { LocationKind } from "../locations/entities/location-kind.enum";
 import { Court } from "../courts/entities/court.entity";
@@ -75,10 +73,6 @@ export class SeedService implements OnModuleInit {
   constructor(
     @InjectRepository(Role)
     private roleRepo: Repository<Role>,
-    @InjectRepository(Organization)
-    private orgRepo: Repository<Organization>,
-    @InjectRepository(Branch)
-    private branchRepo: Repository<Branch>,
     @InjectRepository(Location)
     private locationRepo: Repository<Location>,
     @InjectRepository(Area)
@@ -206,49 +200,17 @@ export class SeedService implements OnModuleInit {
   }
 
   private async seedSportsData() {
-    // 1. Organization (support both CodyPlay and legacy VigorSports)
-    let org = await this.orgRepo.findOne({
-      where: { name: In(["CodyPlay", "VigorSports"]) },
-    });
-    if (!org) {
-      org = await this.orgRepo.save(
-        this.orgRepo.create({
-          name: "CodyPlay",
-          description: "Premium sports facilities management",
-        }),
-      );
-      console.log(`[SeedService] Created organization: ${org.name}`);
-    }
-
-    // 2. Branch
-    let branch = await this.branchRepo.findOne({
-      where: { name: "Texas Region" },
-    });
-    if (!branch) {
-      branch = await this.branchRepo.save(
-        this.branchRepo.create({
-          organizationId: org.id,
-          name: "Texas Region",
-          address: "TX",
-        }),
-      );
-      console.log(`[SeedService] Created branch: ${branch.name}`);
-    }
-
-    // 3. Location hierarchy:
-    // root "Springpark" (managed by super_admin) -> children "Springpark A/B"
     let root = await this.locationRepo.findOne({
       where: { name: "Springpark", kind: LocationKind.ROOT },
     });
     if (!root) {
       root = await this.locationRepo.save(
         this.locationRepo.create({
-          branchId: branch.id,
           name: "Springpark",
           address: "Dallas, TX",
           kind: LocationKind.ROOT,
           parentLocationId: null,
-          status: "inactive", // hidden from Reserve flow
+          status: "inactive",
           visibility: LocationVisibility.PUBLIC,
           timezone: "America/Chicago",
         }),
@@ -274,7 +236,6 @@ export class SeedService implements OnModuleInit {
       if (!location) {
         location = await this.locationRepo.save(
           this.locationRepo.create({
-            branchId: branch.id,
             parentLocationId: root.id,
             kind: LocationKind.CHILD,
             name: child.name,
@@ -287,7 +248,6 @@ export class SeedService implements OnModuleInit {
         console.log(`[SeedService] Created location child: ${location.name}`);
       } else {
         await this.locationRepo.update(location.id, {
-          branchId: branch.id,
           parentLocationId: root.id,
           kind: LocationKind.CHILD,
           status: "active",
@@ -298,21 +258,18 @@ export class SeedService implements OnModuleInit {
       }
     }
 
-    // 4. Super admin account
     const superAdminRole = await this.roleRepo.findOne({
       where: { name: "super_admin" },
     });
     if (superAdminRole) {
       const superEmail = "superadmin@gmail.com";
       const existing = await this.userRepo.findOne({
-        where: { email: superEmail, organizationId: org.id },
+        where: { email: superEmail },
       });
       if (!existing) {
         const passwordHash = await bcrypt.hash("SuperAdmin123!", 10);
         await this.userRepo.save(
           this.userRepo.create({
-            organizationId: org.id,
-            branchId: branch.id,
             roleId: superAdminRole.id,
             email: superEmail,
             passwordHash,
@@ -333,14 +290,16 @@ export class SeedService implements OnModuleInit {
 
   /** Update all existing courts with image URLs and map embed (varied per court) */
   private async updateCourtsWithImages() {
-    const tennisCourts = await this.courtRepo.find({
-      where: { sport: "tennis" },
-      order: { name: "ASC" },
-    });
-    const pickleballCourts = await this.courtRepo.find({
-      where: { sport: "pickleball" },
-      order: { name: "ASC" },
-    });
+    const tennisCourts = await this.courtRepo
+      .createQueryBuilder("c")
+      .where(`'tennis' = ANY(c.sports)`)
+      .orderBy("c.name", "ASC")
+      .getMany();
+    const pickleballCourts = await this.courtRepo
+      .createQueryBuilder("c")
+      .where(`'pickleball' = ANY(c.sports)`)
+      .orderBy("c.name", "ASC")
+      .getMany();
     for (let i = 0; i < tennisCourts.length; i++) {
       const court = tennisCourts[i];
       const idx = i % TENNIS_IMAGES.length;
@@ -367,17 +326,9 @@ export class SeedService implements OnModuleInit {
 
   /** Seed coach users and coach records for the branch (shown in "Our Coaches" at each location) */
   private async seedCoaches() {
-    const org = await this.orgRepo.findOne({
-      where: { name: In(["CodyPlay", "VigorSports"]) },
-    });
-    const branch = await this.branchRepo.findOne({
-      where: { name: "Texas Region" },
-    });
     const coachRole = await this.roleRepo.findOne({ where: { name: "coach" } });
-    if (!org || !branch || !coachRole) {
-      console.log(
-        "[SeedService] Coaches skip: need CodyPlay org, Texas Region branch, and coach role.",
-      );
+    if (!coachRole) {
+      console.log("[SeedService] Coaches skip: coach role missing.");
       return;
     }
 
@@ -573,13 +524,11 @@ export class SeedService implements OnModuleInit {
       courtId?: string | null;
     }) => {
       let user = await this.userRepo.findOne({
-        where: { email: c.email, organizationId: org.id },
+        where: { email: c.email },
       });
       if (!user) {
         user = await this.userRepo.save(
           this.userRepo.create({
-            organizationId: org.id,
-            branchId: branch.id,
             roleId: coachRole.id,
             email: c.email,
             passwordHash,
@@ -841,7 +790,7 @@ export class SeedService implements OnModuleInit {
             locationId,
             areaId,
             name: row.name,
-            sport: row.sport,
+            sports: [row.sport],
             type: row.type,
             pricePerHourPublic: row.pricePerHourPublic,
             pricePerHourMember: row.pricePerHourMember,
@@ -857,7 +806,7 @@ export class SeedService implements OnModuleInit {
       }
       await this.courtRepo.update(court.id, {
         areaId,
-        sport: row.sport,
+        sports: [row.sport],
         type: row.type,
         pricePerHourPublic: row.pricePerHourPublic,
         pricePerHourMember: row.pricePerHourMember,
@@ -1018,19 +967,13 @@ export class SeedService implements OnModuleInit {
    * Private locations require active membership to book courts — seed a demo account.
    */
   private async seedPrivateClubDemoMember() {
-    const org = await this.orgRepo.findOne({
-      where: { name: In(["CodyPlay", "VigorSports"]) },
-    });
-    const branch = await this.branchRepo.findOne({
-      where: { name: "Texas Region" },
-    });
     const playerRole = await this.roleRepo.findOne({
       where: { name: "player" },
     });
     const loc = await this.locationRepo.findOne({
       where: { name: "Springpark B" },
     });
-    if (!org || !branch || !playerRole || !loc) return;
+    if (!playerRole || !loc) return;
 
     const passwordHash = await bcrypt.hash("Password123!", 10);
     const demoMembers: Array<{
@@ -1052,13 +995,11 @@ export class SeedService implements OnModuleInit {
 
     for (const m of demoMembers) {
       let user = await this.userRepo.findOne({
-        where: { email: m.email, organizationId: org.id },
+        where: { email: m.email },
       });
       if (!user) {
         user = await this.userRepo.save(
           this.userRepo.create({
-            organizationId: org.id,
-            branchId: branch.id,
             roleId: playerRole.id,
             email: m.email,
             passwordHash,
@@ -1120,17 +1061,6 @@ export class SeedService implements OnModuleInit {
     const coachRole = await this.roleRepo.findOne({ where: { name: "coach" } });
     if (!coachRole) return;
 
-    const org = await this.orgRepo.findOne({
-      where: { name: In(["CodyPlay", "VigorSports"]) },
-    });
-    const branch = await this.branchRepo.findOne({
-      where: { name: "Texas Region" },
-    });
-    if (!org || !branch) {
-      console.log("[SeedService] Coach assignments skip: org/branch missing.");
-      return;
-    }
-
     const allCourts = await this.courtRepo.find({
       order: { locationId: "ASC", name: "ASC" },
     });
@@ -1150,7 +1080,7 @@ export class SeedService implements OnModuleInit {
 
     for (let i = 0; i < legacyEmails.length; i++) {
       const user = await this.userRepo.findOne({
-        where: { email: legacyEmails[i], organizationId: org.id },
+        where: { email: legacyEmails[i] },
       });
       if (!user) continue;
       const court = allCourts[i % allCourts.length];
@@ -1162,7 +1092,7 @@ export class SeedService implements OnModuleInit {
 
     for (const email of freeEmails) {
       const user = await this.userRepo.findOne({
-        where: { email, organizationId: org.id },
+        where: { email },
       });
       if (!user) continue;
       await this.userRepo.update(user.id, {
@@ -1203,13 +1133,11 @@ export class SeedService implements OnModuleInit {
         nextSlot += 1;
 
         let user = await this.userRepo.findOne({
-          where: { email, organizationId: org.id },
+          where: { email },
         });
         if (!user) {
           user = await this.userRepo.save(
             this.userRepo.create({
-              organizationId: org.id,
-              branchId: branch.id,
               roleId: coachRole.id,
               email,
               passwordHash,

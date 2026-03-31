@@ -11,11 +11,15 @@ import { Coach } from "../coaches/entities/coach.entity";
 import { CreateCourtDto } from "./dto/create-court.dto";
 import { UpdateCourtDto } from "./dto/update-court.dto";
 import { LocationBookingWindow } from "../locations/entities/location-booking-window.entity";
-import { Sport } from "../sports/entities/sport.entity";
 import { CourtBookingWindowAdminDto } from "./dto/court-booking-window-admin.dto";
+import { normalizeCourtSports } from "./court-sports.util";
 
 /** @deprecated Use pricePerHourPublic; kept on API responses for backward compatibility */
-export type CourtWithLegacyPrice = Court & { pricePerHour: number };
+export type CourtWithLegacyPrice = Court & {
+  pricePerHour: number;
+  /** First sport for legacy UIs */
+  sport: string;
+};
 
 @Injectable()
 export class CourtsService {
@@ -26,8 +30,6 @@ export class CourtsService {
     private readonly coachRepo: Repository<Coach>,
     @InjectRepository(LocationBookingWindow)
     private readonly bookingWindowRepo: Repository<LocationBookingWindow>,
-    @InjectRepository(Sport)
-    private readonly sportRepo: Repository<Sport>,
   ) {}
 
   private validateWindowRange(start?: string, end?: string) {
@@ -45,6 +47,7 @@ export class CourtsService {
   private async upsertCourtWindow(
     court: Court,
     dto: { windowStartTime?: string; windowEndTime?: string },
+    windowSport: string,
   ) {
     this.validateWindowRange(dto.windowStartTime, dto.windowEndTime);
     if (!dto.windowStartTime || !dto.windowEndTime) return;
@@ -53,7 +56,7 @@ export class CourtsService {
       where: {
         courtId: court.id,
         locationId: court.locationId ?? "",
-        sport: court.sport,
+        sport: windowSport,
         courtType: court.type,
       },
       order: { sortOrder: "ASC" },
@@ -74,7 +77,7 @@ export class CourtsService {
       this.bookingWindowRepo.create({
         locationId: court.locationId ?? "",
         courtId: court.id,
-        sport: court.sport,
+        sport: windowSport,
         courtType: court.type,
         windowStartTime: dto.windowStartTime,
         windowEndTime: dto.windowEndTime,
@@ -87,9 +90,11 @@ export class CourtsService {
   }
 
   private withLegacyPrice(court: Court): CourtWithLegacyPrice {
+    const sport = court.sports?.[0] ?? "tennis";
     return {
       ...court,
       pricePerHour: parseFloat(court.pricePerHourPublic),
+      sport,
     };
   }
 
@@ -98,17 +103,18 @@ export class CourtsService {
       pricePerHour,
       pricePerHourPublic,
       pricePerHourMember,
-      ...rest
+      sports: sportsDto,
+      sport: legacySport,
+      windowStartTime: _ws,
+      windowEndTime: _we,
+      ...courtFields
     } = dto;
     const pub = pricePerHourPublic ?? pricePerHour ?? 0;
-    let resolvedSport = dto.sport;
-    if (dto.sportId) {
-      const sport = await this.sportRepo.findOne({ where: { id: dto.sportId } });
-      resolvedSport = sport?.code ?? dto.sport;
-    }
+    const sports = normalizeCourtSports(sportsDto, legacySport ?? null);
+
     const court = this.courtRepo.create({
-      ...rest,
-      sport: resolvedSport ?? "tennis",
+      ...courtFields,
+      sports,
       pricePerHourPublic: String(pub),
       pricePerHourMember:
         pricePerHourMember !== undefined && pricePerHourMember !== null
@@ -118,17 +124,19 @@ export class CourtsService {
       mapEmbedUrl: dto.mapEmbedUrl ?? null,
     });
     const saved = await this.courtRepo.save(court);
-    await this.upsertCourtWindow(saved, dto);
+    if (dto.windowStartTime && dto.windowEndTime) {
+      for (const sp of sports) {
+        await this.upsertCourtWindow(saved, dto, sp);
+      }
+    }
     return this.withLegacyPrice(saved);
   }
 
   async findAll(
     locationId?: string,
-    branchId?: string,
     status?: string,
     search?: string,
     sport?: string,
-    sportId?: string,
     pageIndex = 0,
     pageSize = 500,
   ): Promise<ListResponse<CourtWithLegacyPrice>> {
@@ -136,10 +144,10 @@ export class CourtsService {
       .createQueryBuilder("court")
       .leftJoinAndSelect("court.location", "location");
     if (locationId) qb.andWhere("court.locationId = :locationId", { locationId });
-    if (branchId) qb.andWhere("location.branchId = :branchId", { branchId });
     if (status) qb.andWhere("court.status = :status", { status });
-    if (sport) qb.andWhere("court.sport = :sport", { sport });
-    if (sportId) qb.andWhere("court.sportId = :sportId", { sportId });
+    if (sport?.trim()) {
+      qb.andWhere(":sport = ANY(court.sports)", { sport: sport.trim().toLowerCase() });
+    }
     if (search && search.trim()) {
       qb.andWhere("LOWER(court.name) LIKE :q", {
         q: `%${search.trim().toLowerCase()}%`,
@@ -183,16 +191,26 @@ export class CourtsService {
       pricePerHour,
       pricePerHourPublic,
       pricePerHourMember,
-      ...rest
+      sport: windowSportFromDto,
+      sports: sportsInDto,
+      windowStartTime,
+      windowEndTime,
     } = dto;
-    const next: Partial<Court> = { ...rest };
-    if (dto.sportId) {
-      const sportRef = await this.sportRepo.findOne({ where: { id: dto.sportId } });
-      next.sport = sportRef?.code ?? dto.sport ?? row.sport;
-    } else if (dto.sport !== undefined) {
-      next.sport = dto.sport;
+
+    if (dto.name !== undefined) row.name = dto.name;
+    if (dto.locationId !== undefined) row.locationId = dto.locationId;
+    if (dto.areaId !== undefined) row.areaId = dto.areaId;
+    if (dto.type !== undefined) row.type = dto.type;
+    if (dto.description !== undefined) row.description = dto.description;
+    if (dto.imageUrl !== undefined) row.imageUrl = dto.imageUrl;
+    if (dto.imageGallery !== undefined) row.imageGallery = dto.imageGallery;
+    if (dto.mapEmbedUrl !== undefined) row.mapEmbedUrl = dto.mapEmbedUrl;
+    if (dto.status !== undefined) row.status = dto.status;
+
+    if (sportsInDto !== undefined) {
+      row.sports = normalizeCourtSports(sportsInDto, null);
     }
-    Object.assign(row, next);
+
     if (pricePerHourPublic !== undefined || pricePerHour !== undefined) {
       const pub = pricePerHourPublic ?? pricePerHour;
       row.pricePerHourPublic = String(pub ?? row.pricePerHourPublic);
@@ -202,7 +220,14 @@ export class CourtsService {
         pricePerHourMember === null ? null : String(pricePerHourMember);
     }
     await this.courtRepo.save(row);
-    await this.upsertCourtWindow(row, dto);
+
+    if (windowStartTime !== undefined || windowEndTime !== undefined) {
+      const ws =
+        windowSportFromDto?.trim().toLowerCase() ??
+        row.sports?.[0] ??
+        "tennis";
+      await this.upsertCourtWindow(row, { windowStartTime, windowEndTime }, ws);
+    }
     return this.findOne(id);
   }
 
@@ -225,11 +250,7 @@ export class CourtsService {
     return "00:00";
   }
 
-  /**
-   * Admin Court Time Slot list: only windows attached to a court (created via Court Management + slot).
-   */
   async listCourtBookingWindowsForAdmin(
-    branchId?: string,
     search?: string,
   ): Promise<CourtBookingWindowAdminDto[]> {
     const qb = this.bookingWindowRepo
@@ -237,9 +258,6 @@ export class CourtsService {
       .innerJoinAndSelect("w.court", "court")
       .innerJoinAndSelect("w.location", "location")
       .where("w.courtId IS NOT NULL");
-    if (branchId?.trim()) {
-      qb.andWhere("location.branchId = :branchId", { branchId: branchId.trim() });
-    }
     if (search?.trim()) {
       qb.andWhere(
         "(LOWER(court.name) LIKE :q OR LOWER(location.name) LIKE :q)",

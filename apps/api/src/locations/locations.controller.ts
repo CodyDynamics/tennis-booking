@@ -71,13 +71,11 @@ export class LocationsController {
 
   @Get()
   @ApiOperation({ summary: "List locations (paginated)" })
-  @ApiQuery({ name: "branchId", required: false })
   @ApiQuery({ name: "parentLocationId", required: false })
   @ApiQuery({ name: "kind", required: false, enum: ["root", "child"] })
   @ApiQuery({ name: "page", required: false })
   @ApiQuery({ name: "pageSize", required: false })
   findAll(
-    @Query("branchId") branchId?: string,
     @Query("parentLocationId") parentLocationId?: string,
     @Query("kind") kind?: string,
     @Query("page") page?: string,
@@ -89,7 +87,6 @@ export class LocationsController {
       Math.max(1, parseInt(pageSize ?? "200", 10) || 200),
     );
     return this.locationsService.findAll(
-      branchId,
       parentLocationId,
       kind,
       pageIndex,

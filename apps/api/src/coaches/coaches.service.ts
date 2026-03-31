@@ -26,7 +26,6 @@ export class CoachesService {
    * any court (`courtId` null) and have `visibility` = public.
    */
   async findDirectory(
-    branchId?: string,
     pageIndex = 0,
     pageSize = 100,
   ): Promise<ListResponse<Coach>> {
@@ -36,9 +35,6 @@ export class CoachesService {
       .where("user.courtId IS NULL")
       .andWhere("user.visibility = :vis", { vis: "public" })
       .orderBy("coach.createdAt", "DESC");
-    if (branchId) {
-      qb.andWhere("user.branchId = :branchId", { branchId });
-    }
     const safePage = Math.max(0, pageIndex);
     const safeSize = Math.min(500, Math.max(1, pageSize));
     const total = await qb.clone().getCount();

@@ -44,21 +44,16 @@ export class CoachesController {
     summary:
       "Coach directory: unassigned coaches (no court) with public visibility",
   })
-  @ApiQuery({ name: "branchId", required: false, description: "Filter by branch" })
   @ApiQuery({ name: "page", required: false, description: "Page index (0-based)" })
   @ApiQuery({ name: "pageSize", required: false, description: "Page size (max 500, default 100)" })
   @ApiResponse({ status: 200, description: "Paginated list: total, data, paginationInfo" })
-  findAll(
-    @Query("branchId") branchId?: string,
-    @Query("page") page?: string,
-    @Query("pageSize") pageSize?: string,
-  ) {
+  findAll(@Query("page") page?: string, @Query("pageSize") pageSize?: string) {
     const pageIndex = Math.max(0, parseInt(page ?? "0", 10) || 0);
     const size = Math.min(
       500,
       Math.max(1, parseInt(pageSize ?? "100", 10) || 100),
     );
-    return this.coachesService.findDirectory(branchId, pageIndex, size);
+    return this.coachesService.findDirectory(pageIndex, size);
   }
 
   @Get(":id")

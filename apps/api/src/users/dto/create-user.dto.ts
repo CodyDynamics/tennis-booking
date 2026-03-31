@@ -41,16 +41,6 @@ export class CreateUserDto {
   @IsString()
   homeAddress?: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUUID()
-  organizationId?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUUID()
-  branchId?: string;
-
   @ApiProperty({ description: "Role UUID" })
   @IsUUID()
   roleId: string;

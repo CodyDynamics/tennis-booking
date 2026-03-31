@@ -26,12 +26,6 @@ export class CoachSession {
   @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column({ type: "varchar", nullable: true })
-  organizationId: string | null;
-
-  @Column({ type: "varchar", nullable: true })
-  branchId: string | null;
-
   @Column({ type: "uuid", nullable: true })
   locationId: string | null;
 
