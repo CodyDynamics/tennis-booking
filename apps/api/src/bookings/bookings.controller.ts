@@ -173,37 +173,6 @@ export class BookingsController {
     return this.bookingsService.findMyBookings(user.id, from, to);
   }
 
-  @Get(":kind/:id")
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth("JWT")
-  @ApiOperation({ summary: "Get booking by id" })
-  @ApiParam({ name: "kind", enum: ["court", "coach"] })
-  @ApiParam({ name: "id", description: "Booking UUID" })
-  @ApiResponse({ status: 200, description: "{ kind, data }" })
-  @ApiResponse({ status: 404, description: "Booking not found" })
-  findOne(
-    @Param("kind") kind: "court" | "coach",
-    @Param("id") id: string,
-  ) {
-    return this.bookingsService.findBooking(id, kind);
-  }
-
-  @Delete(":kind/:id")
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth("JWT")
-  @ApiOperation({ summary: "Cancel booking" })
-  @ApiParam({ name: "kind", enum: ["court", "coach"] })
-  @ApiParam({ name: "id" })
-  @ApiResponse({ status: 200, description: "Cancel successful" })
-  @ApiResponse({ status: 403, description: "Can only cancel own booking" })
-  cancel(
-    @Param("kind") kind: "court" | "coach",
-    @Param("id") id: string,
-    @CurrentUser() user: { id: string },
-  ) {
-    return this.bookingsService.cancelBooking(id, kind, user.id);
-  }
-
   // ----- Admin -----
 
   @Get("admin/court")
@@ -225,5 +194,36 @@ export class BookingsController {
     @Body() body: AdminUpdateCourtBookingDto,
   ) {
     return this.bookingsService.adminUpdateCourtBooking(id, body);
+  }
+
+  @Get(":kind(court|coach)/:id")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth("JWT")
+  @ApiOperation({ summary: "Get booking by id" })
+  @ApiParam({ name: "kind", enum: ["court", "coach"] })
+  @ApiParam({ name: "id", description: "Booking UUID" })
+  @ApiResponse({ status: 200, description: "{ kind, data }" })
+  @ApiResponse({ status: 404, description: "Booking not found" })
+  findOne(
+    @Param("kind") kind: "court" | "coach",
+    @Param("id") id: string,
+  ) {
+    return this.bookingsService.findBooking(id, kind);
+  }
+
+  @Delete(":kind(court|coach)/:id")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth("JWT")
+  @ApiOperation({ summary: "Cancel booking" })
+  @ApiParam({ name: "kind", enum: ["court", "coach"] })
+  @ApiParam({ name: "id" })
+  @ApiResponse({ status: 200, description: "Cancel successful" })
+  @ApiResponse({ status: 403, description: "Can only cancel own booking" })
+  cancel(
+    @Param("kind") kind: "court" | "coach",
+    @Param("id") id: string,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.bookingsService.cancelBooking(id, kind, user.id);
   }
 }
