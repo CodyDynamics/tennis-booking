@@ -1,8 +1,8 @@
-# Database schema (ERD) — **target design**
+# Database schema (ERD) — **implementation + design notes**
 
-This document describes a **proposed** PostgreSQL schema for the Booking Tennis product: multi-tenant **organization → branch → location → court**, **public vs private locations** with **memberships**, a **wizard-style court booking flow** (sport → indoor/outdoor → single date → time window → duration → court dropdown), and guidance for **high concurrency** (many users on the same day).
+This document tracks the **live** PostgreSQL schema exposed by TypeORM entities under `apps/api/src/**/entities`, plus product rules and **target / future** ideas (concurrency, RabbitMQ, exclusion constraints). The booking product is multi-tenant **organization → branch → location → (area) → court**, **public vs private locations** with **memberships**, and a **slot-first court booking flow** at `/locations/:id/courts` (see §1.4).
 
-> **Note:** The API `apps/api/src/**/entities` now includes the **15 core tables** below (plus optional patterns in §4.3). Use **migrations** in production when `DB_SYNC=false`.
+> **Note:** There are **17** domain + auth tables in the repo today (§7). Use **migrations** in production when `DB_SYNC=false`. Older references to “15 tables” are superseded.
 
 **Column names** are shown in **camelCase** (TypeORM-friendly). You may adopt a `snake_case` naming strategy in Postgres if preferred.
 
@@ -57,8 +57,21 @@ The **admin home** at `/admin` shows **operations analytics** (KPI cards + chart
 
 | Mode | Source |
 |------|--------|
-| **Real** | `GET /admin/dashboard/metrics` (JWT + role `admin` \| `super_admin`). Aggregates from `users`, `courts`, `locations`, `court_bookings`, `coach_sessions`, `coaches`. Includes **last 14 days** daily booking counts, **daily revenue** (sum of `court_bookings.totalPrice`), **14-day revenue total**, and **bookings by sport**. |
+| **Real** | `GET /admin/dashboard/metrics` (JWT + role `admin` \| `super_admin`). Aggregates from `users`, `courts`, `locations`, `court_bookings`, `coach_sessions`, `coaches`. |
 | **Mockup** | Static JSON in the frontend for demos / design reviews when DB is empty or offline. |
+
+**Metrics semantics (aligned with code in `AdminService`):**
+
+| Series | Window / filter |
+|--------|------------------|
+| `dailyCourtBookings` | Rolling **14 calendar days** on `court_bookings.bookingDate` (inclusive from “today − 13” through today, using the same UTC date string as the query), **`bookingStatus` ≠ `cancelled`**. |
+| `dailyRevenue` | Same date window; per-day **sum** of `court_bookings.totalPrice`. |
+| `totals.revenue14d` | Sum of `dailyRevenue` over that window. |
+| `bookingsBySport` | **Same 14-day window** and non-cancelled filter as the daily charts; grouped by `COALESCE(court_bookings.sport, 'unknown')`. |
+| KPI “Open court bookings” | Count of rows with `bookingStatus` ∈ {`pending`, `confirmed`} (not tied to the 14-day window). |
+| KPI “Coach sessions (scheduled)” | `coach_sessions` with `status = scheduled`. |
+
+**Drill-down (UI):** clicking a bar in **By sport** opens a right-hand panel. **Real** data: `GET /admin/dashboard/metrics/by-sport?sport=<key>` returns counts for that sport in the **same 14-day window**, grouped by **booker role name** (`users` → `roles`), **`court_bookings.bookingType`** (`COURT_ONLY` \| `COURT_COACH`), and **`users.accountType`** (`normal` \| `membership` \| `system`). Use `sport=unknown` for the “Other” bucket (null/empty `sport` on rows).
 
 This endpoint is a **read-only aggregate**; it does not introduce new tables. Future admin booking lists can follow §6 (`GET /admin/bookings`).
 
@@ -68,8 +81,8 @@ This endpoint is a **read-only aggregate**; it does not introduce new tables. Fu
 
 | Metric | Count | Notes |
 |--------|------:|-------|
-| **Core domain + auth tables** | **15** | 12 legacy-equivalent + 3 new (`location_booking_windows`, `user_location_memberships`, `membership_transactions`). |
-| **Optional operational tables** | **0–2** | e.g. `booking_commands` for idempotency with async workers (§4.3). |
+| **Core domain + auth tables (implemented)** | **17** | Includes `areas`, `location_booking_windows`, `user_location_memberships`, `membership_transactions`, `booking_commands`, etc. (see §7). |
+| **Optional / future patterns** | — | e.g. heavier use of `booking_commands` with async workers (§4.3); exclusion constraints on `court_bookings` (§4.1). |
 
 Relationship counts evolve with new FKs; the important part is **clear ownership**: location owns booking-window config; user–location membership owns billing history.
 
@@ -171,26 +184,27 @@ Future perks (guest passes, pro shop discount codes) can hang off `user_location
 
 ---
 
-## 7. Tables — target list
+## 7. Tables — implemented list (TypeORM)
 
 | # | Table | Purpose |
 |---|--------|---------|
 | 1 | `organizations` | Tenant |
 | 2 | `branches` | Branch under org |
 | 3 | `locations` | Facility; **public/private**, timezone, **membership pricing** |
-| 4 | `location_booking_windows` | Configurable **time blocks** per location (and sport / court type) |
-| 5 | `courts` | Bookable court; sport, type, pricing |
-| 6 | `sports` | Catalog |
-| 7 | `roles` | RBAC |
-| 8 | `users` | **phone required**, **home address optional** |
-| 9 | `user_location_memberships` | User’s membership at a **private** location |
-| 10 | `membership_transactions` | **Money history** (initiation, monthly, adjustments) |
-| 11 | `coaches` | Coach profile |
-| 12 | `court_bookings` | Booking record + **pricing tier** / discount audit |
-| 13 | `coach_sessions` | Coach sessions |
-| 14 | `password_reset_tokens` | Auth |
-| 15 | `refresh_tokens` | Auth |
-| *opt* | `booking_commands` | Async booking + idempotency (§4.3) |
+| 4 | `areas` | Sub-venue under a location (visibility, status); courts may reference `areaId` |
+| 5 | `location_booking_windows` | Configurable **time blocks** per location (sport / court type, durations, slot grid) |
+| 6 | `courts` | Bookable court; `locationId`, optional `areaId`, optional `sportId`, `sport` / `type` strings, public/member hourly rates |
+| 7 | `sports` | Catalog (referenced by `courts.sportId`) |
+| 8 | `roles` | RBAC; `name`, `permissions` string |
+| 9 | `users` | Accounts: **phone**, optional **home address**, `roleId`, `accountType`, `mustChangePasswordOnFirstLogin`, optional `courtId`, `visibility`, OAuth fields |
+| 10 | `user_location_memberships` | User’s membership at a location (venue scope) |
+| 11 | `membership_transactions` | **Money history** (initiation, monthly, adjustments) |
+| 12 | `coaches` | Coach profile |
+| 13 | `court_bookings` | Court booking row: user, court, location snapshot, sport/court type, window, pricing tier, totals, **bookingType**, **paymentStatus**, **bookingStatus**, optional coach, UTC `bookingStartAt` / `bookingEndAt`, reminder email timestamp |
+| 14 | `coach_sessions` | Coach sessions |
+| 15 | `password_reset_tokens` | Auth |
+| 16 | `refresh_tokens` | Auth |
+| 17 | `booking_commands` | Idempotency / command ledger for booking flows (see entity) |
 
 ---
 
@@ -244,32 +258,56 @@ Defines blocks like **08:00–10:30**, **14:00–15:30** (see UI ref). Can vary 
 | `isActive` | boolean | No | default `true` |
 | timestamps | | | |
 
-### `courts` (extended)
+### `areas` (implemented)
 
 | Column | Type | Notes |
 |--------|------|--------|
-| `id`, `locationId`, `name`, `type`, `sport` | | As today |
-| **`pricePerHourPublic`** | decimal(12,2) | Rename from `pricePerHour` for clarity — **non-member** / public rate |
-| **`pricePerHourMember`** | decimal(12,2) | Nullable; if set, **overrides** percent discount for this court; else use `locations.memberCourtDiscountPercent` |
-| `description`, `imageUrl`, `imageGallery`, `mapEmbedUrl`, `status` | | As today |
+| `id` | uuid | PK |
+| `locationId` | uuid | FK → `locations` |
+| `name`, `description` | varchar/text | |
+| `status` | varchar | e.g. `active` |
+| `visibility` | varchar | aligned with location visibility enum |
 | timestamps | | |
 
-*Alternative:* keep a single `pricePerHour` + only location-level discount — less flexible but simpler.
+### `courts` (implemented)
+
+| Column | Type | Notes |
+|--------|------|--------|
+| `id` | uuid | PK |
+| `locationId` | varchar/uuid | FK → `locations` (nullable in entity; product usually sets it) |
+| `areaId` | uuid | Optional FK → `areas` |
+| `sportId` | uuid | Optional FK → `sports` |
+| `name` | varchar | |
+| `type` | varchar | `indoor` \| `outdoor` |
+| `sport` | varchar | e.g. `tennis`, `pickleball` — used for booking + analytics |
+| `pricePerHourPublic`, `pricePerHourMember` | decimal(12,2) | Member rate optional; see location discount rules |
+| `description`, `imageUrl`, `imageGallery`, `mapEmbedUrl`, `status` | | |
+| timestamps | | |
 
 ### `sports`, `roles`
 
 Unchanged.
 
-### `users` (extended)
+### `users` (implemented)
 
 | Column | Type | Nullable | Notes |
 |--------|------|----------|--------|
-| `id`, `organizationId`, `branchId`, `roleId`, `email`, `passwordHash`, `fullName`, `avatarUrl`, `status`, `googleId`, `courtId`, `visibility` | | As today (names may vary) |
-| **`phone`** or **`phoneNumber`** | varchar | **No** | **Required**; validate format in app |
-| **`homeAddress`** | text | Yes | Optional residential address |
+| `id` | uuid | No | PK |
+| `organizationId`, `branchId` | varchar | Yes | Tenant scope |
+| `roleId` | uuid | Yes | FK → `roles` |
+| `email` | varchar | No | Unique per `organizationId` |
+| `passwordHash` | varchar | Yes | Null for OAuth-only until set |
+| `fullName`, `firstName`, `lastName` | varchar | | |
+| `phone` | varchar | No | Required for registered users; OAuth may use placeholder until profile completion |
+| `homeAddress` | text | Yes | |
+| `avatarUrl` | varchar | Yes | |
+| `status` | varchar | No | e.g. `active` |
+| `mustChangePasswordOnFirstLogin` | boolean | No | Default `false` |
+| `googleId` | varchar | Yes | |
+| `courtId` | uuid | Yes | Staff/coach primary court |
+| `visibility` | varchar | No | `public` \| `private` (directory / coaches listing) |
+| **`accountType`** | varchar | No | `normal` \| `membership` \| `system` — provisioning / registration path (see enum in code) |
 | timestamps | | |
-
-Migration note: backfill `phone` for existing rows before setting `NOT NULL`.
 
 ### `user_location_memberships` (new)
 
@@ -301,23 +339,31 @@ Unique: `(userId, locationId)` for one active membership row per pair (or use pa
 | `metadata` | jsonb | Yes | Extensibility |
 | `createdAt` | timestamptz | No | Append-only |
 
-### `court_bookings` (extended)
-
-Keep existing columns; add / clarify:
+### `court_bookings` (implemented)
 
 | Column | Type | Notes |
 |--------|------|--------|
-| `locationId` | uuid | Yes | Denormalized FK for admin filters + pricing rules |
-| `sport`, `courtType` | varchar | Yes | Snapshot at booking time |
-| `locationBookingWindowId` | uuid | Yes | Which window config was used |
-| **`pricingTier`** | varchar | `public` \| `member` |
-| **`unitPricePerHourSnapshot`** | decimal | Rate used before discount |
-| **`discountAmount`** | decimal | Yes | If member / promo |
-| **`totalPrice`** | decimal | Final |
-| `userLocationMembershipId` | uuid | Yes | FK when `pricingTier = member` |
-| *(optional)* `bookingStartAt`, `bookingEndAt` | timestamptz | For exclusion constraints in UTC |
+| `id` | uuid | PK |
+| `organizationId`, `branchId` | varchar | Optional tenant copy |
+| `locationId` | uuid | Denormalized FK for filters, pricing, analytics |
+| `sport`, `courtType` | varchar | Snapshot at booking time (admin “By sport” uses `sport`) |
+| `locationBookingWindowId` | uuid | Window config used |
+| `pricingTier` | varchar | `public` \| `member` |
+| `unitPricePerHourSnapshot`, `discountAmount`, `totalPrice` | decimal | Pricing audit |
+| `userLocationMembershipId` | uuid | When member pricing applies |
+| `bookingStartAt`, `bookingEndAt` | timestamptz | UTC interval (slot conflict / APIs) |
+| `courtId`, `userId` | uuid | Required FKs |
+| `coachId` | varchar | Optional |
+| **`bookingType`** | varchar | `COURT_ONLY` \| `COURT_COACH` |
+| `bookingDate` | date | Calendar date (location-local semantics in app) |
+| `startTime`, `endTime` | time | |
+| `durationMinutes` | int | |
+| **`paymentStatus`** | varchar | `unpaid` \| `paid` \| `refunded` |
+| **`bookingStatus`** | varchar | `pending` \| `confirmed` \| `cancelled` \| `completed` |
+| `reminder30EmailSentAt` | timestamptz | Optional; 30-minute reminder tracking |
+| timestamps | | |
 
-Booking flow must **re-validate** membership and price **inside the transaction** that inserts the row.
+Booking flow must **re-validate** membership and price **inside the transaction** that inserts the row. **Recommended future:** DB exclusion constraint on `(courtId, tstzrange(bookingStartAt, bookingEndAt))` (§4.1).
 
 ### `coach_sessions`
 
@@ -339,13 +385,15 @@ See §4.3.
 organizations
      └── branches
               └── locations ──┬── location_booking_windows
-                              │
-                              └── courts
+                              ├── areas
+                              └── courts (→ optional area, optional sport catalog)
                                      ↑
 user_location_memberships ── membership_transactions
          │
-users ───┴── court_bookings (→ courts, users, optional membership)
+users ───┴── court_bookings (→ courts, users, optional membership, optional coach)
               coach_sessions
+roles ←──── users.roleId
+coaches (profile rows; may link to users via API layer)
 ```
 
 ---

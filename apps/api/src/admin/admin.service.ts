@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, Repository } from "typeorm";
+import { In, Repository, SelectQueryBuilder } from "typeorm";
 import { User } from "../users/entities/user.entity";
 import { Court } from "../courts/entities/court.entity";
 import { Location } from "../locations/entities/location.entity";
@@ -13,6 +13,23 @@ import {
   CoachSessionStatus,
 } from "../bookings/entities/coach-session.entity";
 import { Coach } from "../coaches/entities/coach.entity";
+
+/** Same rolling window as daily booking/revenue charts (inclusive). */
+function dashboardFromDateStr(): string {
+  const fromDay = new Date();
+  fromDay.setUTCDate(fromDay.getUTCDate() - 13);
+  return fromDay.toISOString().slice(0, 10);
+}
+
+export interface SportBookingBreakdownDto {
+  /** Normalized key matching `bookingsBySport[].sport` (`unknown` = null/empty sport on rows). */
+  sport: string;
+  windowDays: 14;
+  totalBookings: number;
+  byRole: { role: string; count: number }[];
+  byBookingType: { bookingType: string; count: number }[];
+  byAccountType: { accountType: string; count: number }[];
+}
 
 export interface DashboardMetricsDto {
   totals: {
@@ -51,9 +68,7 @@ export class AdminService {
   ) {}
 
   async getDashboardMetrics(): Promise<DashboardMetricsDto> {
-    const fromDay = new Date();
-    fromDay.setUTCDate(fromDay.getUTCDate() - 13);
-    const fromStr = fromDay.toISOString().slice(0, 10);
+    const fromStr = dashboardFromDateStr();
 
     const [
       usersActive,
@@ -96,7 +111,8 @@ export class AdminService {
         .createQueryBuilder("b")
         .select(`COALESCE(b.sport, 'unknown')`, "sport")
         .addSelect("COUNT(*)", "count")
-        .where(`b."bookingStatus" NOT IN (:...st)`, {
+        .where(`b."bookingDate" >= :from`, { from: fromStr })
+        .andWhere(`b."bookingStatus" NOT IN (:...st)`, {
           st: [CourtBookingStatus.CANCELLED],
         })
         .groupBy(`COALESCE(b.sport, 'unknown')`)
@@ -145,6 +161,72 @@ export class AdminService {
       dailyCourtBookings,
       bookingsBySport,
       dailyRevenue,
+    };
+  }
+
+  /**
+   * Drill-down for the “By sport” chart: bookings in the same 14-day window, grouped by
+   * booker role name, `court_bookings.bookingType`, and `users.accountType`.
+   */
+  async getSportBookingBreakdown(sportKey: string): Promise<SportBookingBreakdownDto> {
+    const fromStr = dashboardFromDateStr();
+    const sport = sportKey.trim().toLowerCase() || "unknown";
+
+    const baseWhere = (qb: SelectQueryBuilder<CourtBooking>) =>
+      qb
+        .where(`b."bookingDate" >= :from`, { from: fromStr })
+        .andWhere(`b."bookingStatus" NOT IN (:...st)`, {
+          st: [CourtBookingStatus.CANCELLED],
+        })
+        .andWhere(`COALESCE(b.sport, 'unknown') = :sport`, { sport });
+
+    const totalRow = await baseWhere(
+      this.courtBookingRepo.createQueryBuilder("b"),
+    )
+      .select("COUNT(*)", "cnt")
+      .getRawOne<{ cnt: string }>();
+    const totalBookings = parseInt(totalRow?.cnt ?? "0", 10) || 0;
+
+    const [byRoleRaw, byTypeRaw, byAcctRaw] = await Promise.all([
+      baseWhere(this.courtBookingRepo.createQueryBuilder("b"))
+        .innerJoin("b.user", "u")
+        .leftJoin("u.role", "r")
+        .select(`COALESCE(r.name, 'no_role')`, "role")
+        .addSelect("COUNT(*)", "cnt")
+        .groupBy(`COALESCE(r.name, 'no_role')`)
+        .orderBy("cnt", "DESC")
+        .getRawMany<{ role: string; cnt: string }>(),
+      baseWhere(this.courtBookingRepo.createQueryBuilder("b"))
+        .select("b.bookingType", "bookingType")
+        .addSelect("COUNT(*)", "cnt")
+        .groupBy("b.bookingType")
+        .orderBy("cnt", "DESC")
+        .getRawMany<{ bookingType: string; cnt: string }>(),
+      baseWhere(this.courtBookingRepo.createQueryBuilder("b"))
+        .innerJoin("b.user", "u")
+        .select("u.accountType", "accountType")
+        .addSelect("COUNT(*)", "cnt")
+        .groupBy("u.accountType")
+        .orderBy("cnt", "DESC")
+        .getRawMany<{ accountType: string; cnt: string }>(),
+    ]);
+
+    return {
+      sport,
+      windowDays: 14,
+      totalBookings,
+      byRole: byRoleRaw.map((r) => ({
+        role: r.role === "no_role" ? "No role" : r.role,
+        count: parseInt(r.cnt, 10) || 0,
+      })),
+      byBookingType: byTypeRaw.map((r) => ({
+        bookingType: r.bookingType ?? "unknown",
+        count: parseInt(r.cnt, 10) || 0,
+      })),
+      byAccountType: byAcctRaw.map((r) => ({
+        accountType: r.accountType ?? "unknown",
+        count: parseInt(r.cnt, 10) || 0,
+      })),
     };
   }
 }
