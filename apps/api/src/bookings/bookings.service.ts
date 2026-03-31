@@ -140,7 +140,9 @@ export class BookingsService {
     const qb = this.courtRepo
       .createQueryBuilder("c")
       .where("c.locationId = :locationId", { locationId: dto.locationId })
-      .andWhere("c.type = :courtType", { courtType: dto.courtType })
+      .andWhere(":courtType = ANY(c.courtTypes)", {
+        courtType: dto.courtType.toLowerCase(),
+      })
       .andWhere("c.status = :status", { status: "active" })
       .andWhere(":sport = ANY(c.sports)", { sport: dto.sport.toLowerCase() });
     if (dto.areaId) {
