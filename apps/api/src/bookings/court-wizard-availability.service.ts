@@ -40,7 +40,9 @@ export interface BookingWindowDto {
 export interface WizardCourtSummary {
   id: string;
   name: string;
+  /** @deprecated prefer courtTypes */
   type: string;
+  courtTypes: string[];
   sport: string;
   status: string;
   pricePerHourPublic: string;
@@ -252,7 +254,9 @@ export class CourtWizardAvailabilityService {
     const courts = await this.courtRepo
       .createQueryBuilder("c")
       .where("c.locationId = :locationId", { locationId })
-      .andWhere("c.type = :courtType", { courtType })
+      .andWhere(":courtType = ANY(c.courtTypes)", {
+        courtType: courtType.toLowerCase(),
+      })
       .andWhere("c.status = :status", { status: "active" })
       .andWhere(":sport = ANY(c.sports)", { sport: sport.toLowerCase() })
       .orderBy("c.name", "ASC")
@@ -364,7 +368,8 @@ export class CourtWizardAvailabilityService {
       courts: courts.map((c) => ({
         id: c.id,
         name: c.name,
-        type: c.type,
+        type: c.courtTypes?.[0] ?? "outdoor",
+        courtTypes: c.courtTypes ?? ["outdoor"],
         sport: c.sports?.[0] ?? "tennis",
         status: c.status,
         pricePerHourPublic: c.pricePerHourPublic,
@@ -411,7 +416,9 @@ export class CourtWizardAvailabilityService {
     const qb = this.courtRepo
       .createQueryBuilder("c")
       .where("c.locationId = :locationId", { locationId })
-      .andWhere("c.type = :courtType", { courtType })
+      .andWhere(":courtType = ANY(c.courtTypes)", {
+        courtType: courtType.toLowerCase(),
+      })
       .andWhere("c.status = :status", { status: "active" })
       .andWhere(":sport = ANY(c.sports)", { sport: sport.toLowerCase() });
     if (areaId) {

@@ -791,7 +791,7 @@ export class SeedService implements OnModuleInit {
             areaId,
             name: row.name,
             sports: [row.sport],
-            type: row.type,
+            courtTypes: [row.type],
             pricePerHourPublic: row.pricePerHourPublic,
             pricePerHourMember: row.pricePerHourMember,
             description: row.description,
@@ -807,7 +807,7 @@ export class SeedService implements OnModuleInit {
       await this.courtRepo.update(court.id, {
         areaId,
         sports: [row.sport],
-        type: row.type,
+        courtTypes: [row.type],
         pricePerHourPublic: row.pricePerHourPublic,
         pricePerHourMember: row.pricePerHourMember,
         description: row.description,

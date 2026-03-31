@@ -15,7 +15,7 @@ export class CreateCourtDto {
   @IsString()
   locationId: string;
 
-  @ApiPropertyOptional({ description: "Area UUID (under location child)" })
+  @ApiPropertyOptional({ description: "Area UUID (under location)" })
   @IsOptional()
   @IsString()
   areaId?: string;
@@ -24,7 +24,22 @@ export class CreateCourtDto {
   @IsString()
   name: string;
 
-  @ApiPropertyOptional({ enum: ["indoor", "outdoor"], default: "outdoor" })
+  @ApiPropertyOptional({
+    type: [String],
+    example: ["outdoor", "indoor"],
+    description: "Indoor and/or outdoor; at least one required when creating",
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsIn(["indoor", "outdoor"], { each: true })
+  courtTypes?: string[];
+
+  @ApiPropertyOptional({
+    enum: ["indoor", "outdoor"],
+    default: "outdoor",
+    description: "Deprecated: use courtTypes",
+  })
   @IsOptional()
   @IsIn(["indoor", "outdoor"])
   type?: string;

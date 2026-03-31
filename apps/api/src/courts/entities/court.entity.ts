@@ -24,8 +24,11 @@ export class Court {
   @Column()
   name: string;
 
-  @Column({ type: "varchar", default: "outdoor" })
-  type: string; // indoor | outdoor
+  /**
+   * Indoor / outdoor — a court may support both (same physical surface, multiple booking filters).
+   */
+  @Column({ type: "varchar", array: true, default: "{outdoor}" })
+  courtTypes: string[];
 
   /**
    * Sports this physical court can be booked for (same slot grid / exclusivity).

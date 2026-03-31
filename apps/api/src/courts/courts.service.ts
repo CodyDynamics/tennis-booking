@@ -13,12 +13,15 @@ import { UpdateCourtDto } from "./dto/update-court.dto";
 import { LocationBookingWindow } from "../locations/entities/location-booking-window.entity";
 import { CourtBookingWindowAdminDto } from "./dto/court-booking-window-admin.dto";
 import { normalizeCourtSports } from "./court-sports.util";
+import { normalizeCourtTypes } from "./court-types.util";
 
 /** @deprecated Use pricePerHourPublic; kept on API responses for backward compatibility */
 export type CourtWithLegacyPrice = Court & {
   pricePerHour: number;
   /** First sport for legacy UIs */
   sport: string;
+  /** First environment tag for legacy UIs */
+  type: string;
 };
 
 @Injectable()
@@ -48,16 +51,19 @@ export class CourtsService {
     court: Court,
     dto: { windowStartTime?: string; windowEndTime?: string },
     windowSport: string,
+    windowCourtType: string,
   ) {
     this.validateWindowRange(dto.windowStartTime, dto.windowEndTime);
     if (!dto.windowStartTime || !dto.windowEndTime) return;
+
+    const ct = windowCourtType.trim().toLowerCase();
 
     const existing = await this.bookingWindowRepo.findOne({
       where: {
         courtId: court.id,
         locationId: court.locationId ?? "",
         sport: windowSport,
-        courtType: court.type,
+        courtType: ct,
       },
       order: { sortOrder: "ASC" },
     });
@@ -78,7 +84,7 @@ export class CourtsService {
         locationId: court.locationId ?? "",
         courtId: court.id,
         sport: windowSport,
-        courtType: court.type,
+        courtType: ct,
         windowStartTime: dto.windowStartTime,
         windowEndTime: dto.windowEndTime,
         allowedDurationMinutes: "[30,60,90]",
@@ -91,10 +97,13 @@ export class CourtsService {
 
   private withLegacyPrice(court: Court): CourtWithLegacyPrice {
     const sport = court.sports?.[0] ?? "tennis";
+    const types = court.courtTypes?.length ? court.courtTypes : ["outdoor"];
     return {
       ...court,
       pricePerHour: parseFloat(court.pricePerHourPublic),
       sport,
+      /** @deprecated use courtTypes */
+      type: types[0],
     };
   }
 
@@ -105,16 +114,20 @@ export class CourtsService {
       pricePerHourMember,
       sports: sportsDto,
       sport: legacySport,
+      courtTypes: courtTypesDto,
+      type: legacyType,
       windowStartTime: _ws,
       windowEndTime: _we,
       ...courtFields
     } = dto;
     const pub = pricePerHourPublic ?? pricePerHour ?? 0;
     const sports = normalizeCourtSports(sportsDto, legacySport ?? null);
+    const courtTypes = normalizeCourtTypes(courtTypesDto, legacyType ?? null);
 
     const court = this.courtRepo.create({
       ...courtFields,
       sports,
+      courtTypes,
       pricePerHourPublic: String(pub),
       pricePerHourMember:
         pricePerHourMember !== undefined && pricePerHourMember !== null
@@ -126,7 +139,9 @@ export class CourtsService {
     const saved = await this.courtRepo.save(court);
     if (dto.windowStartTime && dto.windowEndTime) {
       for (const sp of sports) {
-        await this.upsertCourtWindow(saved, dto, sp);
+        for (const env of courtTypes) {
+          await this.upsertCourtWindow(saved, dto, sp, env);
+        }
       }
     }
     return this.withLegacyPrice(saved);
@@ -193,6 +208,8 @@ export class CourtsService {
       pricePerHourMember,
       sport: windowSportFromDto,
       sports: sportsInDto,
+      courtTypes: courtTypesInDto,
+      type: typeFromDto,
       windowStartTime,
       windowEndTime,
     } = dto;
@@ -200,7 +217,9 @@ export class CourtsService {
     if (dto.name !== undefined) row.name = dto.name;
     if (dto.locationId !== undefined) row.locationId = dto.locationId;
     if (dto.areaId !== undefined) row.areaId = dto.areaId;
-    if (dto.type !== undefined) row.type = dto.type;
+    if (courtTypesInDto !== undefined) {
+      row.courtTypes = normalizeCourtTypes(courtTypesInDto, null);
+    }
     if (dto.description !== undefined) row.description = dto.description;
     if (dto.imageUrl !== undefined) row.imageUrl = dto.imageUrl;
     if (dto.imageGallery !== undefined) row.imageGallery = dto.imageGallery;
@@ -226,7 +245,16 @@ export class CourtsService {
         windowSportFromDto?.trim().toLowerCase() ??
         row.sports?.[0] ??
         "tennis";
-      await this.upsertCourtWindow(row, { windowStartTime, windowEndTime }, ws);
+      const windowCt =
+        typeFromDto?.trim().toLowerCase() ??
+        row.courtTypes?.[0] ??
+        "outdoor";
+      await this.upsertCourtWindow(
+        row,
+        { windowStartTime, windowEndTime },
+        ws,
+        windowCt,
+      );
     }
     return this.findOne(id);
   }
@@ -257,7 +285,8 @@ export class CourtsService {
       .createQueryBuilder("w")
       .innerJoinAndSelect("w.court", "court")
       .innerJoinAndSelect("w.location", "location")
-      .where("w.courtId IS NOT NULL");
+      .where("w.courtId IS NOT NULL")
+      .andWhere("court.status = :active", { active: "active" });
     if (search?.trim()) {
       qb.andWhere(
         "(LOWER(court.name) LIKE :q OR LOWER(location.name) LIKE :q)",

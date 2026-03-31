@@ -52,7 +52,7 @@ export class CreateUserDto {
   @IsBoolean()
   mustChangePasswordOnFirstLogin?: boolean;
 
-  @ApiPropertyOptional({ description: "Optional location-child membership to assign" })
+  @ApiPropertyOptional({ description: "Optional location membership to assign" })
   @IsOptional()
   @IsUUID()
   membershipLocationId?: string;
