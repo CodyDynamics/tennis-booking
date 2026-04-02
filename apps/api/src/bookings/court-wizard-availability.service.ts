@@ -187,7 +187,6 @@ export class CourtWizardAvailabilityService {
     const rows = await this.windowRepo.find({
       where: {
         locationId,
-        sport,
         courtType,
         isActive: true,
       },
@@ -197,7 +196,7 @@ export class CourtWizardAvailabilityService {
     return rows.map((w) => ({
       id: w.id,
       locationId: w.locationId,
-      sport: w.sport,
+      sport,
       courtType: w.courtType,
       windowStartTime: w.windowStartTime,
       windowEndTime: w.windowEndTime,
@@ -238,10 +237,23 @@ export class CourtWizardAvailabilityService {
     if (!window) {
       throw new NotFoundException("Booking window not found for this location");
     }
-    if (window.sport !== sport || window.courtType !== courtType) {
-      throw new BadRequestException(
-        "Window does not match selected sport and court type",
-      );
+    if (window.courtType !== courtType) {
+      throw new BadRequestException("Window does not match selected court type");
+    }
+    if (window.courtId) {
+      const winCourt = await this.courtRepo.findOne({
+        where: { id: window.courtId },
+      });
+      if (
+        !winCourt ||
+        !(winCourt.sports ?? []).some(
+          (s) => s.toLowerCase() === sport.toLowerCase(),
+        )
+      ) {
+        throw new BadRequestException(
+          "This time window is not available for the selected activity on this court",
+        );
+      }
     }
 
     const allowed = parseAllowedDurations(window.allowedDurationMinutes);
@@ -433,10 +445,11 @@ export class CourtWizardAvailabilityService {
 
     const courtIds = courts.map((c) => c.id);
 
-    // Load all active booking windows for this location+sport+courtType.
+    // Load all active booking windows for this location+courtType (sport-agnostic).
+    // Which activities can book is determined by each court's `sports` (Court Management).
     // courtId=null => location-level default; courtId=... => per-court override.
     const windows = await this.windowRepo.find({
-      where: { locationId, sport, courtType, isActive: true },
+      where: { locationId, courtType, isActive: true },
       order: { sortOrder: "ASC", windowStartTime: "ASC" },
     });
 
