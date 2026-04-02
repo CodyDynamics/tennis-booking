@@ -43,7 +43,7 @@ export class BookingsController {
   @ApiBearerAuth("JWT")
   @ApiOperation({
     summary:
-      "Booking wizard: list time windows (location_booking_windows) for sport + indoor/outdoor",
+      "Booking wizard: list time windows for indoor/outdoor at this location (activity filtering uses Court Management sports on each court)",
   })
   @ApiResponse({ status: 200, description: "Array of window configs" })
   getCourtWizardWindows(
