@@ -26,6 +26,7 @@ import { UsersService } from "./users.service";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { CreateMembershipPlaceholderDto } from "./dto/create-membership-placeholder.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
+import { UpdateOwnProfileDto } from "./dto/update-own-profile.dto";
 
 @ApiTags("Users")
 @ApiBearerAuth("JWT")
@@ -43,6 +44,20 @@ export class UsersController {
   @ApiResponse({ status: 401, description: "Unauthorized" })
   async getProfile(@CurrentUser() user: { id: string }) {
     return this.usersService.findOne(user.id, true);
+  }
+
+  @Patch("profile")
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: "Update current user profile (name, email, phone)" })
+  @ApiBody({ type: UpdateOwnProfileDto })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 400 })
+  @ApiResponse({ status: 401 })
+  async patchProfile(
+    @CurrentUser() user: { id: string },
+    @Body() dto: UpdateOwnProfileDto,
+  ) {
+    return this.usersService.updateOwnProfile(user.id, dto);
   }
 
   @Get()

@@ -1,5 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsEmail, IsString, IsOptional, IsUUID, IsNotEmpty } from "class-validator";
+import {
+  IsEmail,
+  IsString,
+  IsOptional,
+  IsUUID,
+  IsNotEmpty,
+  Matches,
+} from "class-validator";
 
 /** Pre-add a member (email + phone); user sets password via public /register OTP. */
 export class CreateMembershipPlaceholderDto {
@@ -36,4 +43,16 @@ export class CreateMembershipPlaceholderDto {
   @IsOptional()
   @IsUUID()
   membershipLocationId?: string;
+
+  @ApiPropertyOptional({ description: "Join date YYYY-MM-DD" })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  membershipJoinDate?: string;
+
+  @ApiPropertyOptional({ description: "End date YYYY-MM-DD" })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  membershipEndDate?: string;
 }

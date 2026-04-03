@@ -8,6 +8,7 @@ import {
   MinLength,
   IsUUID,
   ValidateIf,
+  Matches,
 } from "class-validator";
 import { ApiPropertyOptional } from "@nestjs/swagger";
 
@@ -44,4 +45,16 @@ export class UpdateUserDto extends PartialType(
     UserAccountType.MEMBERSHIP,
   ])
   accountType?: UserAccountType;
+
+  @ApiPropertyOptional({ description: "Membership period start (YYYY-MM-DD)" })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: "membershipJoinDate must be YYYY-MM-DD" })
+  membershipJoinDate?: string | null;
+
+  @ApiPropertyOptional({ description: "Membership period end (YYYY-MM-DD)" })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: "membershipEndDate must be YYYY-MM-DD" })
+  membershipEndDate?: string | null;
 }

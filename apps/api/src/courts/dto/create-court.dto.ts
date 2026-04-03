@@ -8,7 +8,10 @@ import {
   Matches,
   IsArray,
   ArrayMinSize,
+  ValidateNested,
 } from "class-validator";
+import { Type } from "class-transformer";
+import { PerSportWindowDto } from "./per-sport-window.dto";
 
 export class CreateCourtDto {
   @ApiProperty({ description: "Location UUID" })
@@ -144,4 +147,23 @@ export class CreateCourtDto {
     message: "windowEndTime must be HH:mm",
   })
   windowEndTime?: string;
+
+  @ApiPropertyOptional({
+    enum: ["shared", "per_sport"],
+    description:
+      "shared = one window for all sports on the court; per_sport = use perSportWindows",
+  })
+  @IsOptional()
+  @IsIn(["shared", "per_sport"])
+  courtScheduleMode?: "shared" | "per_sport";
+
+  @ApiPropertyOptional({
+    type: [PerSportWindowDto],
+    description: "When courtScheduleMode is per_sport, one row per sport (times may differ).",
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PerSportWindowDto)
+  perSportWindows?: PerSportWindowDto[];
 }

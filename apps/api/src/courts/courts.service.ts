@@ -4,12 +4,13 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, Repository } from "typeorm";
+import { Brackets, Repository } from "typeorm";
 import { buildListResponse, ListResponse } from "@app/common";
 import { Court } from "./entities/court.entity";
 import { Coach } from "../coaches/entities/coach.entity";
 import { CreateCourtDto } from "./dto/create-court.dto";
 import { UpdateCourtDto } from "./dto/update-court.dto";
+import type { PerSportWindowDto } from "./dto/per-sport-window.dto";
 import { LocationBookingWindow } from "../locations/entities/location-booking-window.entity";
 import { CourtBookingWindowAdminDto } from "./dto/court-booking-window-admin.dto";
 import { normalizeCourtSports } from "./court-sports.util";
@@ -53,65 +54,140 @@ export class CourtsService {
     }
   }
 
-  private async upsertCourtWindow(
+  private envTypesForCourt(court: Court): ("indoor" | "outdoor")[] {
+    const envs = (court.courtTypes ?? []).filter(
+      (t): t is "indoor" | "outdoor" => t === "indoor" || t === "outdoor",
+    );
+    return envs.length ? envs : ["outdoor"];
+  }
+
+  private async rewriteCourtWindows(
     court: Court,
-    dto: { windowStartTime?: string; windowEndTime?: string },
-    windowCourtType: string,
+    payload:
+      | { mode: "shared"; start: string; end: string }
+      | {
+          mode: "per_sport";
+          entries: { sport: string; start: string; end: string }[];
+        },
   ) {
-    this.validateWindowRange(dto.windowStartTime, dto.windowEndTime);
-    if (!dto.windowStartTime || !dto.windowEndTime) return;
+    const locId = court.locationId ?? "";
+    const types = this.envTypesForCourt(court);
+    await this.bookingWindowRepo.delete({ courtId: court.id });
 
-    const ct = windowCourtType.trim().toLowerCase();
-
-    const existing = await this.bookingWindowRepo
-      .createQueryBuilder("w")
-      .where("w.courtId = :courtId", { courtId: court.id })
-      .andWhere("w.locationId = :lid", { lid: court.locationId ?? "" })
-      .andWhere("w.courtType = :ct", { ct })
-      .orderBy("w.sortOrder", "ASC")
-      .getOne();
-
-    let keptId: string;
-    if (existing) {
-      await this.bookingWindowRepo.update(existing.id, {
-        sport: BOOKING_WINDOW_SPORT_SHARED,
-        windowStartTime: dto.windowStartTime,
-        windowEndTime: dto.windowEndTime,
-        allowedDurationMinutes: "[30,60,90]",
-        slotGridMinutes: 30,
-        isActive: true,
-      });
-      keptId = existing.id;
-    } else {
-      const created = await this.bookingWindowRepo.save(
-        this.bookingWindowRepo.create({
-          locationId: court.locationId ?? "",
-          courtId: court.id,
-          sport: BOOKING_WINDOW_SPORT_SHARED,
-          courtType: ct,
-          windowStartTime: dto.windowStartTime,
-          windowEndTime: dto.windowEndTime,
-          allowedDurationMinutes: "[30,60,90]",
-          slotGridMinutes: 30,
-          sortOrder: 0,
-          isActive: true,
-        }),
-      );
-      keptId = created.id;
+    if (payload.mode === "shared") {
+      this.validateWindowRange(payload.start, payload.end);
+      for (const ct of types) {
+        await this.bookingWindowRepo.save(
+          this.bookingWindowRepo.create({
+            locationId: locId,
+            courtId: court.id,
+            sport: BOOKING_WINDOW_SPORT_SHARED,
+            courtType: ct,
+            windowStartTime: payload.start,
+            windowEndTime: payload.end,
+            allowedDurationMinutes: "[30,60,90]",
+            slotGridMinutes: 30,
+            sortOrder: 0,
+            isActive: true,
+          }),
+        );
+      }
+      return;
     }
 
-    const dupes = await this.bookingWindowRepo
-      .createQueryBuilder("w")
-      .where("w.courtId = :courtId", { courtId: court.id })
-      .andWhere("w.locationId = :lid", { lid: court.locationId ?? "" })
-      .andWhere("w.courtType = :ct", { ct })
-      .andWhere("w.id != :keep", { keep: keptId })
-      .getMany();
-    if (dupes.length > 0) {
-      await this.bookingWindowRepo.delete({
-        id: In(dupes.map((d) => d.id)),
-      });
+    for (const e of payload.entries) {
+      this.validateWindowRange(e.start, e.end);
+      const sp = e.sport.trim().toLowerCase();
+      for (const ct of types) {
+        await this.bookingWindowRepo.save(
+          this.bookingWindowRepo.create({
+            locationId: locId,
+            courtId: court.id,
+            sport: sp,
+            courtType: ct,
+            windowStartTime: e.start,
+            windowEndTime: e.end,
+            allowedDurationMinutes: "[30,60,90]",
+            slotGridMinutes: 30,
+            sortOrder: 0,
+            isActive: true,
+          }),
+        );
+      }
     }
+  }
+
+  private scheduleFromCreateDto(dto: CreateCourtDto):
+    | { mode: "shared"; start: string; end: string }
+    | { mode: "per_sport"; entries: { sport: string; start: string; end: string }[] }
+    | "clear"
+    | null {
+    if (dto.courtScheduleMode === "per_sport") {
+      const list = dto.perSportWindows ?? [];
+      if (list.length === 0) return "clear";
+      return {
+        mode: "per_sport",
+        entries: list.map((e: PerSportWindowDto) => ({
+          sport: e.sport.trim().toLowerCase(),
+          start: e.windowStartTime,
+          end: e.windowEndTime,
+        })),
+      };
+    }
+    if (dto.windowStartTime && dto.windowEndTime) {
+      return {
+        mode: "shared",
+        start: dto.windowStartTime,
+        end: dto.windowEndTime,
+      };
+    }
+    return null;
+  }
+
+  private scheduleFromUpdateDto(
+    dto: UpdateCourtDto,
+  ):
+    | { mode: "shared"; start: string; end: string }
+    | { mode: "per_sport"; entries: { sport: string; start: string; end: string }[] }
+    | "clear"
+    | undefined {
+    const touched =
+      dto.courtScheduleMode !== undefined ||
+      dto.perSportWindows !== undefined ||
+      (dto.windowStartTime !== undefined && dto.windowEndTime !== undefined);
+    if (!touched) return undefined;
+
+    if (dto.courtScheduleMode === "per_sport") {
+      const list = dto.perSportWindows ?? [];
+      if (list.length === 0) return "clear";
+      return {
+        mode: "per_sport",
+        entries: list.map((e) => ({
+          sport: e.sport.trim().toLowerCase(),
+          start: e.windowStartTime,
+          end: e.windowEndTime,
+        })),
+      };
+    }
+    if (
+      dto.courtScheduleMode === "shared" &&
+      dto.windowStartTime &&
+      dto.windowEndTime
+    ) {
+      return {
+        mode: "shared",
+        start: dto.windowStartTime,
+        end: dto.windowEndTime,
+      };
+    }
+    if (dto.windowStartTime !== undefined && dto.windowEndTime !== undefined) {
+      return {
+        mode: "shared",
+        start: dto.windowStartTime,
+        end: dto.windowEndTime,
+      };
+    }
+    return undefined;
   }
 
   private withLegacyPrice(court: Court): CourtWithLegacyPrice {
@@ -137,6 +213,8 @@ export class CourtsService {
       type: legacyType,
       windowStartTime: _ws,
       windowEndTime: _we,
+      courtScheduleMode: _csm,
+      perSportWindows: _psw,
       ...courtFields
     } = dto;
     const pub = pricePerHourPublic ?? pricePerHour ?? 0;
@@ -156,10 +234,11 @@ export class CourtsService {
       mapEmbedUrl: dto.mapEmbedUrl ?? null,
     });
     const saved = await this.courtRepo.save(court);
-    if (dto.windowStartTime && dto.windowEndTime) {
-      for (const env of courtTypes) {
-        await this.upsertCourtWindow(saved, dto, env);
-      }
+    const sched = this.scheduleFromCreateDto(dto);
+    if (sched === "clear") {
+      await this.bookingWindowRepo.delete({ courtId: saved.id });
+    } else if (sched) {
+      await this.rewriteCourtWindows(saved, sched);
     }
     return this.withLegacyPrice(saved);
   }
@@ -180,10 +259,9 @@ export class CourtsService {
     if (sport?.trim()) {
       qb.andWhere(":sport = ANY(court.sports)", { sport: sport.trim().toLowerCase() });
     }
-    if (search && search.trim()) {
-      qb.andWhere("LOWER(court.name) LIKE :q", {
-        q: `%${search.trim().toLowerCase()}%`,
-      });
+    if (search !== undefined && search !== null) {
+      const frag = this.courtNameSearchSql("court.name", "courtNm", search);
+      if (frag) qb.andWhere(frag.clause, frag.params);
     }
     qb.orderBy("court.name", "ASC");
     const safePage = Math.max(0, pageIndex);
@@ -225,8 +303,6 @@ export class CourtsService {
       pricePerHourMember,
       sports: sportsInDto,
       courtTypes: courtTypesInDto,
-      windowStartTime,
-      windowEndTime,
     } = dto;
 
     if (dto.name !== undefined) row.name = dto.name;
@@ -255,15 +331,11 @@ export class CourtsService {
     }
     await this.courtRepo.save(row);
 
-    if (windowStartTime !== undefined || windowEndTime !== undefined) {
-      const envTags = (row.courtTypes ?? []).filter(
-        (t): t is "indoor" | "outdoor" =>
-          t === "indoor" || t === "outdoor",
-      );
-      const forEachEnv = envTags.length ? envTags : (["outdoor"] as const);
-      for (const ct of forEachEnv) {
-        await this.upsertCourtWindow(row, { windowStartTime, windowEndTime }, ct);
-      }
+    const sched = this.scheduleFromUpdateDto(dto);
+    if (sched === "clear") {
+      await this.bookingWindowRepo.delete({ courtId: row.id });
+    } else if (sched && sched !== undefined) {
+      await this.rewriteCourtWindows(row, sched);
     }
     return this.findOne(id);
   }
@@ -272,6 +344,35 @@ export class CourtsService {
     await this.findOne(id);
     await this.courtRepo.delete(id);
     return { deleted: true };
+  }
+
+  /**
+   * Court/location name search (aligned with frontend `courtNameMatchesSearch`):
+   * - Trailing whitespace → exact match (case-insensitive).
+   * - Otherwise → ILIKE %needle%.
+   */
+  private courtNameSearchSql(
+    column: string,
+    paramPrefix: string,
+    search: string,
+  ): { clause: string; params: Record<string, string> } | null {
+    const raw = String(search);
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    const wantsExact = raw.length > raw.trimEnd().length;
+    const needle = wantsExact ? raw.trimEnd().trim() : trimmed;
+    if (wantsExact) {
+      const p = `${paramPrefix}Exact`;
+      return {
+        clause: `LOWER(TRIM(BOTH FROM ${column})) = LOWER(TRIM(BOTH FROM :${p}))`,
+        params: { [p]: needle },
+      };
+    }
+    const p = `${paramPrefix}Like`;
+    return {
+      clause: `LOWER(${column}) LIKE :${p}`,
+      params: { [p]: `%${needle.toLowerCase()}%` },
+    };
   }
 
   private timeToHHmm(value: string | Date | undefined | null): string {
@@ -295,11 +396,16 @@ export class CourtsService {
       .innerJoinAndSelect("w.court", "court")
       .innerJoinAndSelect("w.location", "location")
       .where("w.courtId IS NOT NULL");
-    if (search?.trim()) {
-      qb.andWhere(
-        "(LOWER(court.name) LIKE :q OR LOWER(location.name) LIKE :q)",
-        { q: `%${search.trim().toLowerCase()}%` },
-      );
+    if (search !== undefined && search !== null && search.trim() !== "") {
+      const fc = this.courtNameSearchSql("court.name", "cwCourt", search);
+      const fl = this.courtNameSearchSql("location.name", "cwLoc", search);
+      if (fc && fl) {
+        qb.andWhere(
+          new Brackets((wqb) => {
+            wqb.where(fc.clause, fc.params).orWhere(fl.clause, fl.params);
+          }),
+        );
+      }
     }
     qb.orderBy("location.name", "ASC")
       .addOrderBy("court.name", "ASC")
