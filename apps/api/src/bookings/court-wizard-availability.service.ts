@@ -106,6 +106,12 @@ function intervalsOverlap(
   return aStart < bEnd && bStart < aEnd;
 }
 
+function bookingWindowMatchesSport(w: { sport: string }, sport: string): boolean {
+  const ws = (w.sport ?? "").trim().toLowerCase();
+  if (!ws || ws === "*") return true;
+  return ws === sport.trim().toLowerCase();
+}
+
 function parseAllowedDurations(raw: string): number[] {
   try {
     const v = JSON.parse(raw) as unknown;
@@ -192,8 +198,9 @@ export class CourtWizardAvailabilityService {
       },
       order: { sortOrder: "ASC", windowStartTime: "ASC" },
     });
+    const filtered = rows.filter((w) => bookingWindowMatchesSport(w, sport));
 
-    return rows.map((w) => ({
+    return filtered.map((w) => ({
       id: w.id,
       locationId: w.locationId,
       sport,
@@ -239,6 +246,9 @@ export class CourtWizardAvailabilityService {
     }
     if (window.courtType !== courtType) {
       throw new BadRequestException("Window does not match selected court type");
+    }
+    if (!bookingWindowMatchesSport(window, sport)) {
+      throw new BadRequestException("Window does not match selected activity");
     }
     if (window.courtId) {
       const winCourt = await this.courtRepo.findOne({
@@ -448,10 +458,11 @@ export class CourtWizardAvailabilityService {
     // Load all active booking windows for this location+courtType (sport-agnostic).
     // Which activities can book is determined by each court's `sports` (Court Management).
     // courtId=null => location-level default; courtId=... => per-court override.
-    const windows = await this.windowRepo.find({
+    const windowRows = await this.windowRepo.find({
       where: { locationId, courtType, isActive: true },
       order: { sortOrder: "ASC", windowStartTime: "ASC" },
     });
+    const windows = windowRows.filter((w) => bookingWindowMatchesSport(w, sport));
 
     if (windows.length === 0) {
       return { locationId, sport, courtType, timezone: location.timezone, bookingDate: dateStr, durationMinutes, slots: [] };

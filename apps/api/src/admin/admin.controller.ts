@@ -1,7 +1,9 @@
 import {
   BadRequestException,
   Controller,
+  DefaultValuePipe,
   Get,
+  ParseIntPipe,
   Query,
   UseGuards,
 } from "@nestjs/common";
@@ -16,7 +18,10 @@ import { AdminRoleGuard } from "./admin-role.guard";
 import {
   AdminService,
   DashboardMetricsDto,
+  DayBookingDrilldownPageDto,
+  KpiDrilldownPageDto,
   SportBookingBreakdownDto,
+  SportBreakdownDrilldownPageDto,
 } from "./admin.service";
 
 @ApiTags("Admin")
@@ -51,5 +56,63 @@ export class AdminController {
       throw new BadRequestException('Query parameter "sport" is required');
     }
     return this.adminService.getSportBookingBreakdown(sport);
+  }
+
+  @Get("metrics/by-sport/drilldown")
+  @UseGuards(JwtAuthGuard, AdminRoleGuard)
+  @ApiBearerAuth("JWT")
+  @ApiOperation({
+    summary:
+      "Paginated distinct bookers for one slice of the sport breakdown (same 14-day window)",
+  })
+  getSportDrilldown(
+    @Query("sport") sport: string,
+    @Query("dimension") dimension: string,
+    @Query("value") value: string,
+    @Query("page", new DefaultValuePipe(0), ParseIntPipe) page: number,
+    @Query("pageSize", new DefaultValuePipe(40), ParseIntPipe) pageSize: number,
+  ): Promise<SportBreakdownDrilldownPageDto> {
+    if (!sport?.trim() || !dimension?.trim() || !value?.trim()) {
+      throw new BadRequestException("sport, dimension, and value are required");
+    }
+    return this.adminService.getSportBreakdownDrilldown(
+      sport,
+      dimension,
+      value,
+      page,
+      pageSize,
+    );
+  }
+
+  @Get("metrics/kpi-drilldown")
+  @UseGuards(JwtAuthGuard, AdminRoleGuard)
+  @ApiBearerAuth("JWT")
+  @ApiOperation({ summary: "Paginated rows behind a dashboard KPI tile" })
+  getKpiDrilldown(
+    @Query("metric") metric: string,
+    @Query("page", new DefaultValuePipe(0), ParseIntPipe) page: number,
+    @Query("pageSize", new DefaultValuePipe(40), ParseIntPipe) pageSize: number,
+  ): Promise<KpiDrilldownPageDto> {
+    if (!metric?.trim()) {
+      throw new BadRequestException('Query parameter "metric" is required');
+    }
+    return this.adminService.getKpiDrilldown(metric, page, pageSize);
+  }
+
+  @Get("metrics/day-bookings")
+  @UseGuards(JwtAuthGuard, AdminRoleGuard)
+  @ApiBearerAuth("JWT")
+  @ApiOperation({
+    summary: "Court bookings on a single calendar day (non-cancelled), paginated",
+  })
+  getDayBookings(
+    @Query("date") date: string,
+    @Query("page", new DefaultValuePipe(0), ParseIntPipe) page: number,
+    @Query("pageSize", new DefaultValuePipe(40), ParseIntPipe) pageSize: number,
+  ): Promise<DayBookingDrilldownPageDto> {
+    if (!date?.trim()) {
+      throw new BadRequestException('Query parameter "date" is required');
+    }
+    return this.adminService.getDayCourtBookingsDrilldown(date, page, pageSize);
   }
 }

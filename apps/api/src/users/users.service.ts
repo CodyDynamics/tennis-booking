@@ -12,6 +12,7 @@ import { UserAccountType } from "./entities/user-account-type.enum";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { CreateMembershipPlaceholderDto } from "./dto/create-membership-placeholder.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
+import { UpdateOwnProfileDto } from "./dto/update-own-profile.dto";
 import { RolesService } from "../roles/roles.service";
 import { UserLocationMembership } from "../memberships/entities/user-location-membership.entity";
 import { MembershipStatus } from "../memberships/entities/membership.enums";
@@ -26,6 +27,15 @@ function sanitizeUser<T extends Partial<User>>(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { passwordHash: _, ...rest } = user;
   return rest as Omit<T, "passwordHash">;
+}
+
+function membershipYmd(
+  d: Date | string | null | undefined,
+): string | null {
+  if (d === null || d === undefined) return null;
+  const x = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(x.getTime())) return null;
+  return x.toISOString().slice(0, 10);
 }
 
 /** Eligible membership rows for “assigned to a location” (booking + admin scope). */
@@ -299,6 +309,8 @@ export class UsersService {
         id: m.id,
         locationId: m.locationId,
         status: m.status,
+        joinDate: membershipYmd(m.currentPeriodStart),
+        endDate: membershipYmd(m.currentPeriodEnd),
       })),
     }));
   }
@@ -359,6 +371,8 @@ export class UsersService {
         id: m.id,
         locationId: m.locationId,
         status: m.status,
+        joinDate: membershipYmd(m.currentPeriodStart),
+        endDate: membershipYmd(m.currentPeriodEnd),
       })),
     };
   }
@@ -368,6 +382,52 @@ export class UsersService {
       where: { email },
       relations: ["role"],
     });
+  }
+
+  /** Current user updates their own name, email, phone (no admin permission). */
+  async updateOwnProfile(userId: string, dto: UpdateOwnProfileDto) {
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      relations: ["role"],
+    });
+    if (!user) throw new NotFoundException("User not found");
+
+    if (dto.email !== undefined) {
+      const next = dto.email.trim().toLowerCase();
+      if (next !== user.email.toLowerCase()) {
+        const existing = await this.userRepo.findOne({ where: { email: next } });
+        if (existing) {
+          throw new BadRequestException("Email already in use");
+        }
+        user.email = next;
+      }
+    }
+
+    if (dto.firstName !== undefined) {
+      const t = dto.firstName.trim();
+      if (!t) throw new BadRequestException("First name cannot be empty");
+      user.firstName = t;
+    }
+    if (dto.lastName !== undefined) {
+      const t = dto.lastName.trim();
+      if (!t) throw new BadRequestException("Last name cannot be empty");
+      user.lastName = t;
+    }
+    if (dto.firstName !== undefined || dto.lastName !== undefined) {
+      const fn = (user.firstName ?? "").trim();
+      const ln = (user.lastName ?? "").trim();
+      const combined = `${fn} ${ln}`.trim();
+      if (combined) {
+        user.fullName = combined;
+      }
+    }
+
+    if (dto.phone !== undefined) {
+      user.phone = dto.phone.trim();
+    }
+
+    await this.userRepo.save(user);
+    return this.findOne(userId, true);
   }
 
   /** Pre-approved membership row (no password until user completes /register). */
@@ -422,6 +482,12 @@ export class UsersService {
           userId: user.id,
           locationId: dto.membershipLocationId,
           status: MembershipStatus.PENDING_PAYMENT,
+          currentPeriodStart: dto.membershipJoinDate
+            ? new Date(dto.membershipJoinDate)
+            : null,
+          currentPeriodEnd: dto.membershipEndDate
+            ? new Date(dto.membershipEndDate)
+            : null,
         }),
       );
     }
@@ -552,14 +618,50 @@ export class UsersService {
         if (!locExists) {
           throw new BadRequestException("Invalid membership location");
         }
+        const prevMembership = await this.membershipRepo.findOne({
+          where: { userId: id },
+        });
+        const prevStart = prevMembership?.currentPeriodStart ?? null;
+        const prevEnd = prevMembership?.currentPeriodEnd ?? null;
         await this.membershipRepo.delete({ userId: id });
         await this.membershipRepo.save(
           this.membershipRepo.create({
             userId: id,
             locationId: dto.membershipLocationId,
             status: MembershipStatus.ACTIVE,
+            currentPeriodStart:
+              dto.membershipJoinDate !== undefined
+                ? dto.membershipJoinDate
+                  ? new Date(dto.membershipJoinDate)
+                  : null
+                : prevStart,
+            currentPeriodEnd:
+              dto.membershipEndDate !== undefined
+                ? dto.membershipEndDate
+                  ? new Date(dto.membershipEndDate)
+                  : null
+                : prevEnd,
           }),
         );
+      }
+    } else if (
+      dto.membershipJoinDate !== undefined ||
+      dto.membershipEndDate !== undefined
+    ) {
+      const m = await this.membershipRepo.findOne({ where: { userId: id } });
+      if (m) {
+        await this.membershipRepo.update(m.id, {
+          ...(dto.membershipJoinDate !== undefined && {
+            currentPeriodStart: dto.membershipJoinDate
+              ? new Date(dto.membershipJoinDate)
+              : null,
+          }),
+          ...(dto.membershipEndDate !== undefined && {
+            currentPeriodEnd: dto.membershipEndDate
+              ? new Date(dto.membershipEndDate)
+              : null,
+          }),
+        });
       }
     }
 
