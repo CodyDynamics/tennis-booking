@@ -36,6 +36,10 @@ export interface SportBreakdownDrilldownRowDto {
   email: string;
   fullName: string | null;
   bookingCount: number;
+  phone: string | null;
+  homeAddress: string | null;
+  /** One representative court name from this user’s bookings in the segment (MIN for stability). */
+  primaryCourtName: string | null;
 }
 
 export interface SportBreakdownDrilldownPageDto {
@@ -355,14 +359,20 @@ export class AdminService {
     if (dim === "bookingtype") {
       listQb = listQb.innerJoin("b.user", "u");
     }
+    listQb = listQb.leftJoin("b.court", "court");
     const rows = await listQb
       .select("u.id", "userId")
       .addSelect("u.email", "email")
       .addSelect("u.fullName", "fullName")
+      .addSelect("u.phone", "phone")
+      .addSelect("u.homeAddress", "homeAddress")
       .addSelect("COUNT(b.id)", "bookingCount")
+      .addSelect("MIN(court.name)", "primaryCourtName")
       .groupBy("u.id")
       .addGroupBy("u.email")
       .addGroupBy("u.fullName")
+      .addGroupBy("u.phone")
+      .addGroupBy("u.homeAddress")
       .orderBy("COUNT(b.id)", "DESC")
       .offset(skip)
       .limit(take)
@@ -370,7 +380,10 @@ export class AdminService {
         userId: string;
         email: string;
         fullName: string | null;
+        phone: string | null;
+        homeAddress: string | null;
         bookingCount: string;
+        primaryCourtName: string | null;
       }>();
 
     const dimNorm =
@@ -392,6 +405,9 @@ export class AdminService {
         email: r.email,
         fullName: r.fullName,
         bookingCount: parseInt(r.bookingCount, 10) || 0,
+        phone: r.phone ?? null,
+        homeAddress: r.homeAddress ?? null,
+        primaryCourtName: r.primaryCourtName ?? null,
       })),
     };
   }
