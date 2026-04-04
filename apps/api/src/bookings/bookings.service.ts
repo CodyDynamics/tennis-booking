@@ -24,7 +24,10 @@ import { BookingMailService } from "../notifications/booking-mail.service";
 import { Area } from "../areas/entities/area.entity";
 import { LocationVisibility } from "../locations/entities/location.enums";
 import { LocationsService } from "../locations/locations.service";
-import { CourtBooking } from "./entities/court-booking.entity";
+import {
+  CourtBooking,
+  CourtBookingStatus,
+} from "./entities/court-booking.entity";
 // (User/Location repos not needed yet; keep imports minimal)
 import { AdminListCourtBookingsQueryDto } from "./dto/admin-list-court-bookings.query.dto";
 import { AdminUpdateCourtBookingDto } from "./dto/admin-update-court-booking.dto";
@@ -50,6 +53,34 @@ export class BookingsService {
     @InjectRepository(CourtBooking)
     private readonly courtBookingRepo: Repository<CourtBooking>,
   ) {}
+
+  /**
+   * One active court booking per user per calendar day (any location).
+   * Cancelled rows do not count. When rescheduling, pass excludeBookingId so the same row is ignored.
+   */
+  private async assertAtMostOneCourtBookingPerUserPerDay(
+    userId: string,
+    bookingDate: string,
+    excludeBookingId?: string,
+  ): Promise<void> {
+    const day = bookingDate.slice(0, 10);
+    const qb = this.courtBookingRepo
+      .createQueryBuilder("cb")
+      .where("cb.userId = :userId", { userId })
+      .andWhere("cb.bookingDate = :day", { day })
+      .andWhere("cb.bookingStatus != :cancelled", {
+        cancelled: CourtBookingStatus.CANCELLED,
+      });
+    if (excludeBookingId) {
+      qb.andWhere("cb.id != :excludeId", { excludeId: excludeBookingId });
+    }
+    const count = await qb.getCount();
+    if (count > 0) {
+      throw new ConflictException(
+        "You already have a court booking on this date. Only one court booking per day is allowed.",
+      );
+    }
+  }
 
   private async assertAreaAccess(userId: string, locationId: string, areaId?: string) {
     if (!areaId) return;
@@ -143,6 +174,10 @@ export class BookingsService {
    */
   async createSlotBooking(userId: string, dto: CreateCourtSlotBookingDto) {
     await this.assertAreaAccess(userId, dto.locationId, dto.areaId);
+    await this.assertAtMostOneCourtBookingPerUserPerDay(
+      userId,
+      dto.bookingDate,
+    );
     const qb = this.courtRepo
       .createQueryBuilder("c")
       .where("c.locationId = :locationId", { locationId: dto.locationId })
@@ -204,6 +239,11 @@ export class BookingsService {
     dto: CreateCourtSlotBookingDto,
   ) {
     await this.assertAreaAccess(userId, dto.locationId, dto.areaId);
+    await this.assertAtMostOneCourtBookingPerUserPerDay(
+      userId,
+      dto.bookingDate,
+      bookingId,
+    );
     const duration =
       dto.durationMinutes ?? this.getDurationMinutes(dto.startTime, dto.endTime);
     const result = await this.courtBookingHandler.rescheduleSlotBooking(
