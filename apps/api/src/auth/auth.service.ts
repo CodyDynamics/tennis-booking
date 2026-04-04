@@ -130,23 +130,47 @@ export class AuthService {
       .toString()
       .padStart(length, "0");
     this.otpStore.set("register", email, otp);
-    try {
-      await this.emailService.sendRegistrationOtpEmail(email, otp);
-    } catch (err) {
-      this.registerPendingStore.delete(email);
-      this.otpStore.clear("register", email);
-      this.logger.error(
-        `Send registration OTP failed for ${email}: ${err instanceof Error ? err.message : String(err)}`,
-        err instanceof Error ? err.stack : undefined,
+
+    const sendRegistrationEmail = this.configService.get<boolean>(
+      "auth.sendRegistrationEmail",
+      true,
+    );
+
+    if (sendRegistrationEmail) {
+      try {
+        await this.emailService.sendRegistrationOtpEmail(email, otp);
+      } catch (err) {
+        this.registerPendingStore.delete(email);
+        this.otpStore.clear("register", email);
+        this.logger.error(
+          `Send registration OTP failed for ${email}: ${err instanceof Error ? err.message : String(err)}`,
+          err instanceof Error ? err.stack : undefined,
+        );
+        throw new ServiceUnavailableException(
+          "Unable to send verification email. Please try again later or contact support.",
+        );
+      }
+    } else {
+      this.logger.warn(
+        `SEND_REGISTRATION_EMAIL=false: skipped sending registration OTP to ${email}`,
       );
-      throw new ServiceUnavailableException(
-        "Unable to send verification email. Please try again later or contact support.",
-      );
+      if (process.env.NODE_ENV !== "production") {
+        this.logger.warn(
+          `[dev] Registration OTP for ${email} (not emailed): ${otp}`,
+        );
+      } else {
+        this.logger.error(
+          "SEND_REGISTRATION_EMAIL=false in production: users cannot receive registration codes by email. Re-enable mail or fix configuration.",
+        );
+      }
     }
 
     return {
-      message:
-        "We sent a verification code to your email. Enter it to complete registration.",
+      message: sendRegistrationEmail
+        ? "We sent a verification code to your email. Enter it to complete registration."
+        : process.env.NODE_ENV !== "production"
+          ? "Email sending is disabled for registration. Check the API server log for your verification code, then enter it below."
+          : "Registration email is disabled. Contact support if you need help completing signup.",
     };
   }
 

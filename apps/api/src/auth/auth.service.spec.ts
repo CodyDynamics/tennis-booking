@@ -110,6 +110,7 @@ describe("AuthService", () => {
           frontendUrl: "http://localhost:3000",
           "otp.loginLength": 6,
           "otp.loginTtlSeconds": 300,
+          "auth.sendRegistrationEmail": true,
         };
         return map[key] ?? defaultValue;
       }),
@@ -219,6 +220,29 @@ describe("AuthService", () => {
         BadRequestException,
       );
       expect(registerPendingStore.set).not.toHaveBeenCalled();
+    });
+
+    it("should skip registration email when auth.sendRegistrationEmail is false", async () => {
+      userRepo.findOne.mockResolvedValue(null);
+      configService.get.mockImplementation((key: string, defaultValue?: unknown) => {
+        if (key === "auth.sendRegistrationEmail") return false;
+        const map: Record<string, unknown> = {
+          "jwt.secret": "secret",
+          "jwt.expiresIn": "1h",
+          "jwt.refreshSecret": "refresh-secret",
+          "jwt.refreshExpiresIn": "7d",
+          frontendUrl: "http://localhost:3000",
+          "otp.loginLength": 6,
+          "otp.loginTtlSeconds": 300,
+        };
+        return map[key] ?? defaultValue;
+      });
+
+      const result = await service.requestRegisterOtp(registerDto);
+
+      expect(emailService.sendRegistrationOtpEmail).not.toHaveBeenCalled();
+      expect(otpStore.set).toHaveBeenCalled();
+      expect(result.message).toContain("disabled");
     });
   });
 

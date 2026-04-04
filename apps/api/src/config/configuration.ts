@@ -43,6 +43,11 @@ export default () => ({
   auth: {
     /** When "true": login uses email OTP after password. Default: false (email + password only). */
     loginOtpEnabled: process.env.LOGIN_OTP_ENABLED === "true",
+    /**
+     * When false: registration does not send the verification email (local/Docker without SMTP).
+     * Non-production: OTP is logged on the server so you can complete signup from the UI.
+     */
+    sendRegistrationEmail: process.env.SEND_REGISTRATION_EMAIL !== "false",
   },
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID,
