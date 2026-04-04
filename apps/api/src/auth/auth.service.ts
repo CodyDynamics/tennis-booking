@@ -174,7 +174,9 @@ export class AuthService {
         `Send registration OTP failed for ${email}: ${err instanceof Error ? err.message : String(err)}`,
         err instanceof Error ? err.stack : undefined,
       );
-      throw new ServiceUnavailableException(this.mailSendFailureUserMessage(err));
+      throw new ServiceUnavailableException(
+        this.mailSendFailureUserMessage(err),
+      );
     }
 
     return {
@@ -487,7 +489,9 @@ export class AuthService {
         `Send OTP email failed for ${user.email}: ${err instanceof Error ? err.message : String(err)}`,
         err instanceof Error ? err.stack : undefined,
       );
-      throw new ServiceUnavailableException(this.mailSendFailureUserMessage(err));
+      throw new ServiceUnavailableException(
+        this.mailSendFailureUserMessage(err),
+      );
     }
     return {
       message: "OTP sent to your email. Please enter it to sign in.",
