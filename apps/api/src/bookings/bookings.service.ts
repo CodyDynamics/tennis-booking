@@ -82,7 +82,11 @@ export class BookingsService {
     }
   }
 
-  private async assertAreaAccess(userId: string, locationId: string, areaId?: string) {
+  private async assertAreaAccess(
+    userId: string,
+    locationId: string,
+    areaId?: string,
+  ) {
     if (!areaId) return;
     const area = await this.areaRepo.findOne({ where: { id: areaId } });
     if (!area || area.locationId !== locationId || area.status !== "active") {
@@ -192,7 +196,9 @@ export class BookingsService {
     const courts = await qb.orderBy("c.name", "ASC").getMany();
 
     if (courts.length === 0) {
-      throw new ConflictException("No courts available for this location, sport, and court type.");
+      throw new ConflictException(
+        "No courts available for this location, sport, and court type.",
+      );
     }
 
     // Shuffle courts (random order) to avoid always picking the same one
@@ -214,10 +220,14 @@ export class BookingsService {
     }
 
     if (!assignedCourtId) {
-      throw new ConflictException("All courts are taken for this slot. Please pick another time.");
+      throw new ConflictException(
+        "All courts are taken for this slot. Please pick another time.",
+      );
     }
 
-    const duration = dto.durationMinutes ?? this.getDurationMinutes(dto.startTime, dto.endTime);
+    const duration =
+      dto.durationMinutes ??
+      this.getDurationMinutes(dto.startTime, dto.endTime);
     const result = await this.courtBookingHandler.create({
       userId,
       courtId: assignedCourtId,
@@ -245,7 +255,8 @@ export class BookingsService {
       bookingId,
     );
     const duration =
-      dto.durationMinutes ?? this.getDurationMinutes(dto.startTime, dto.endTime);
+      dto.durationMinutes ??
+      this.getDurationMinutes(dto.startTime, dto.endTime);
     const result = await this.courtBookingHandler.rescheduleSlotBooking(
       userId,
       bookingId,
@@ -317,9 +328,11 @@ export class BookingsService {
       .orderBy("b.bookingDate", "DESC")
       .addOrderBy("b.startTime", "DESC");
 
-    if (q.locationId) qb.andWhere("b.locationId = :locationId", { locationId: q.locationId });
+    if (q.locationId)
+      qb.andWhere("b.locationId = :locationId", { locationId: q.locationId });
     if (q.status) qb.andWhere("b.bookingStatus = :st", { st: q.status });
-    if (q.paymentStatus) qb.andWhere("b.paymentStatus = :ps", { ps: q.paymentStatus });
+    if (q.paymentStatus)
+      qb.andWhere("b.paymentStatus = :ps", { ps: q.paymentStatus });
     if (q.from) qb.andWhere("b.bookingDate >= :from", { from: q.from });
     if (q.to) qb.andWhere("b.bookingDate <= :to", { to: q.to });
     if (q.search?.trim()) {
