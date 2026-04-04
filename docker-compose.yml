@@ -1,6 +1,9 @@
 # Backend stack: Postgres, Redis, API
 # From backend/: docker compose up -d --build
 #
+# Đăng ký: mặc định SEND_REGISTRATION_EMAIL=false (không SMTP trong compose) → user được tạo ngay, không OTP email.
+# Đặt SEND_REGISTRATION_EMAIL=true và cấu hình mail nếu cần flow OTP.
+#
 # Truy cập từ máy khác / Internet:
 # - Publish port: mặc định 0.0.0.0:${API_HOST_PORT:-3000} → mở firewall OS + router (nếu cần) + security group (cloud).
 # - CORS: đặt FRONTEND_URL (URL frontend thật) và/hoặc CORS_ORIGINS (danh sách URL cách nhau bởi dấu phẩy).
@@ -76,6 +79,9 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3001}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       LOGIN_OTP_ENABLED: ${LOGIN_OTP_ENABLED:-false}
+      # false (default here): đăng ký xong ngay, không gửi mail OTP (phù hợp Docker chưa cấu hình SMTP).
+      # true: bật flow email OTP; cần EMAIL_* / RESEND_API_KEY / MAIL_PROVIDER phù hợp.
+      SEND_REGISTRATION_EMAIL: ${SEND_REGISTRATION_EMAIL:-false}
       REDIS_ENABLED: ${REDIS_ENABLED:-false}
       DB_SYNC: ${DB_SYNC:-true}
     ports:

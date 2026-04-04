@@ -10,9 +10,10 @@ import {
   RefreshTokenDto,
 } from "./dto";
 
-const mockRes = () => {
+const mockRes = (): import("express").Response => {
   const res: any = {};
   res.cookie = jest.fn().mockReturnValue(res);
+  res.status = jest.fn().mockReturnValue(res);
   return res;
 };
 
@@ -20,6 +21,7 @@ const mockConfigService = {
   get: jest.fn((key: string, defaultValue?: unknown) => {
     const map: Record<string, unknown> = {
       "cookie.secure": false,
+      "cookie.sameSite": "lax",
       "cookie.accessTokenName": "access_token",
       "cookie.refreshTokenName": "refresh_token",
       "cookie.accessTokenMaxAgeSeconds": 3600,
@@ -81,7 +83,8 @@ describe("AuthController", () => {
       };
       mockAuthService.requestRegisterOtp.mockResolvedValue({ message: "ok" });
 
-      await controller.requestRegisterOtp(dto);
+      const res = mockRes();
+      await controller.requestRegisterOtp(dto, res);
 
       expect(authService.requestRegisterOtp).toHaveBeenCalledWith(dto);
     });

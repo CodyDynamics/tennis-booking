@@ -29,6 +29,7 @@ import {
 } from "./dto";
 import { JwtAuthGuard, CurrentUser } from "@app/common";
 import { AuthResponseDto } from "./dto/auth-response.dto";
+import { isSendRegistrationEmailEnabled } from "../config/configuration";
 
 @ApiTags("Auth")
 @Controller("auth")
@@ -99,7 +100,10 @@ export class AuthController {
       "auth.loginOtpEnabled",
       false,
     );
-    return { loginOtpEnabled };
+    return {
+      loginOtpEnabled,
+      registrationEmailEnabled: isSendRegistrationEmailEnabled(),
+    };
   }
 
   private clearAuthCookies(res: Response) {
@@ -119,14 +123,34 @@ export class AuthController {
 
   @Post("register/request-otp")
   @Public()
-  @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: "Start registration: validate data and send email verification code",
+    summary:
+      "Start registration: send email OTP, or complete signup immediately when SEND_REGISTRATION_EMAIL=false",
   })
   @ApiBody({ type: RegisterDto })
   @ApiResponse({ status: 200, description: "OTP sent to email" })
-  async requestRegisterOtp(@Body() registerDto: RegisterDto) {
-    return this.authService.requestRegisterOtp(registerDto);
+  @ApiResponse({
+    status: 201,
+    description: "User created (registration email disabled)",
+    type: AuthResponseDto,
+  })
+  async requestRegisterOtp(
+    @Body() registerDto: RegisterDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.requestRegisterOtp(registerDto);
+    if ("accessToken" in result && result.accessToken) {
+      res.status(HttpStatus.CREATED);
+      this.setAuthCookies(
+        res,
+        result.accessToken,
+        result.refreshToken,
+        false,
+      );
+      return { user: result.user, accessToken: result.accessToken };
+    }
+    res.status(HttpStatus.OK);
+    return result;
   }
 
   @Post("register/verify-otp")

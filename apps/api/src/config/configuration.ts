@@ -1,5 +1,18 @@
 import * as path from "path";
 
+const SEND_REGISTRATION_EMAIL_OFF = new Set(["false", "0", "no", "off"]);
+
+/**
+ * Registration OTP email: enabled unless env explicitly turns it off.
+ * Reads `process.env` at call time (not only via ConfigService) so Docker / .env is respected reliably.
+ * Accepts: false, False, FALSE, 0, no, off (trimmed).
+ */
+export function isSendRegistrationEmailEnabled(): boolean {
+  const v = (process.env.SEND_REGISTRATION_EMAIL ?? "").trim().toLowerCase();
+  if (v === "") return true;
+  return !SEND_REGISTRATION_EMAIL_OFF.has(v);
+}
+
 export default () => ({
   port: parseInt(process.env.PORT || process.env.GATEWAY_PORT || "3000", 10),
   database: {
@@ -47,7 +60,7 @@ export default () => ({
      * When false: registration does not send the verification email (local/Docker without SMTP).
      * Non-production: OTP is logged on the server so you can complete signup from the UI.
      */
-    sendRegistrationEmail: process.env.SEND_REGISTRATION_EMAIL !== "false",
+    sendRegistrationEmail: isSendRegistrationEmailEnabled(),
   },
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID,
