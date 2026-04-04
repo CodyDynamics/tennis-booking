@@ -30,6 +30,7 @@ export default new DataSource({
   username: process.env.DB_USER || "postgres",
   password: process.env.DB_PASS || "postgres",
   database: process.env.DB_NAME || "booking_tennis",
+  ssl: { rejectUnauthorized: false },
   entities: [
     User,
     Role,
