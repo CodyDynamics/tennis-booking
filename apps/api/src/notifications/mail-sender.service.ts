@@ -180,24 +180,32 @@ export class MailSenderService {
    * Send HTML email. Does not throw for SMTP/Resend failures when called from
    * fire-and-forget paths; logs and returns. Callers that need errors can check return value.
    */
-  async sendHtml(options: SendHtmlMailOptions): Promise<boolean> {
+  async sendHtml(
+    options: SendHtmlMailOptions & { throwOnFailure?: boolean },
+  ): Promise<boolean> {
     if (this.provider === "none") {
       this.logger.debug(
         `Skipping send (provider none): subject=${options.subject}`,
       );
+      if (options.throwOnFailure) {
+        throw new Error(
+          "Mail provider is none: set RESEND_API_KEY, SMTP (EMAIL_HOST), or MAIL_PROVIDER=cloud with Google tokens.",
+        );
+      }
       return false;
     }
     const to = Array.isArray(options.to) ? options.to : [options.to];
+    const { throwOnFailure, ...mailOptions } = options;
     try {
       if (this.provider === "resend") {
         const resend = this.getResend();
         const { error } = await resend.emails.send({
-          from: options.from || this.from,
+          from: mailOptions.from || this.from,
           to,
-          subject: options.subject,
-          html: options.html,
-          text: options.text,
-          replyTo: options.replyTo,
+          subject: mailOptions.subject,
+          html: mailOptions.html,
+          text: mailOptions.text,
+          replyTo: mailOptions.replyTo,
         });
         if (error) {
           this.logger.error(
@@ -209,25 +217,29 @@ export class MailSenderService {
       } else if (this.provider === "cloud") {
         const gmail = this.getCloudGmail();
         const sender = this.config.get<string>("email.googleSenderEmail")?.trim();
-        const raw = this.buildGmailRawMessage(options);
+        const raw = this.buildGmailRawMessage(mailOptions);
         await gmail.users.messages.send({
           userId: sender || "me",
           requestBody: { raw },
         });
       } else {
         await this.getSmtpTransporter().sendMail({
-          from: options.from || this.from,
+          from: mailOptions.from || this.from,
           to: to.join(", "),
-          subject: options.subject,
-          html: options.html,
-          text: options.text,
-          replyTo: options.replyTo,
+          subject: mailOptions.subject,
+          html: mailOptions.html,
+          text: mailOptions.text,
+          replyTo: mailOptions.replyTo,
         });
       }
-      this.logger.log(`Mail sent: "${options.subject}" → ${to.join(", ")}`);
+      this.logger.log(`Mail sent: "${mailOptions.subject}" → ${to.join(", ")}`);
       return true;
     } catch (err) {
-      this.logger.error(`Failed to send mail: ${options.subject}`, err);
+      this.logger.error(`Failed to send mail: ${mailOptions.subject}`, err);
+      if (throwOnFailure) {
+        if (err instanceof Error) throw err;
+        throw new Error(String(err));
+      }
       return false;
     }
   }

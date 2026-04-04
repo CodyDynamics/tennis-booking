@@ -26,7 +26,7 @@ pnpm install
 
 ## 2. Environment variables (optional)
 
-Create `.env` in the backend directory if you want to override default values:
+Docker Compose reads **`backend/.env`** automatically (same file as local `nest start`). Override defaults there; compose interpolates `${VAR:-default}` from it.
 
 ```env
 POSTGRES_USER=postgres

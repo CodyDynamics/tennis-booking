@@ -77,6 +77,21 @@ export class AuthService {
     return [street.trim(), city.trim(), line2].filter(Boolean).join(", ");
   }
 
+  /** User-facing hint when transactional mail fails (e.g. Gmail API invalid_grant). */
+  private mailSendFailureUserMessage(err: unknown): string {
+    const raw = err instanceof Error ? err.message : String(err);
+    if (/unauthorized_client/i.test(raw)) {
+      return "Could not send email: unauthorized_client — the refresh token does not match GOOGLE_CLIENT_ID/SECRET in .env. In OAuth Playground, enable “Use your own OAuth credentials” with the same Client ID and Secret as this app, then generate a new refresh token. Tokens from Playground default credentials will not work with your Cloud Console client.";
+    }
+    if (/invalid_grant/i.test(raw)) {
+      return "Could not send email: Google refresh token expired or revoked (invalid_grant). Regenerate GOOGLE_REFRESH_TOKEN in Google OAuth Playground, or use MAIL_PROVIDER=smtp with a Gmail app password instead of cloud.";
+    }
+    if (/Mail provider is none/i.test(raw)) {
+      return "Email is not configured on the server. Set RESEND_API_KEY or SMTP (EMAIL_HOST, EMAIL_USER, EMAIL_PASSWORD), or use SEND_REGISTRATION_EMAIL=false if OTP by email is not required.";
+    }
+    return "Unable to send verification email. Please try again later or contact support.";
+  }
+
   /** Allow OTP signup if email is new, or matches a membership placeholder (no password yet). */
   private async assertEmailAllowedForRegistrationRequest(
     email: string,
@@ -159,9 +174,7 @@ export class AuthService {
         `Send registration OTP failed for ${email}: ${err instanceof Error ? err.message : String(err)}`,
         err instanceof Error ? err.stack : undefined,
       );
-      throw new ServiceUnavailableException(
-        "Unable to send verification email. Please try again later or contact support.",
-      );
+      throw new ServiceUnavailableException(this.mailSendFailureUserMessage(err));
     }
 
     return {
@@ -474,9 +487,7 @@ export class AuthService {
         `Send OTP email failed for ${user.email}: ${err instanceof Error ? err.message : String(err)}`,
         err instanceof Error ? err.stack : undefined,
       );
-      throw new ServiceUnavailableException(
-        "Unable to send verification email. Please try again later or contact support.",
-      );
+      throw new ServiceUnavailableException(this.mailSendFailureUserMessage(err));
     }
     return {
       message: "OTP sent to your email. Please enter it to sign in.",
