@@ -153,7 +153,7 @@ export class UsersController {
   @RequirePermission("users:view")
   @ApiOperation({
     summary:
-      "List all user memberships at child locations (super_admin Locations page table)",
+      "List all user_location_memberships (root + child venues; super_admin Locations page)",
   })
   @ApiResponse({ status: 200 })
   @ApiResponse({ status: 403 })

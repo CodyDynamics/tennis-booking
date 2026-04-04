@@ -18,7 +18,6 @@ import { UserLocationMembership } from "../memberships/entities/user-location-me
 import { MembershipStatus } from "../memberships/entities/membership.enums";
 import { Location } from "../locations/entities/location.entity";
 import { Area } from "../areas/entities/area.entity";
-import { LocationKind } from "../locations/entities/location-kind.enum";
 
 function sanitizeUser<T extends Partial<User>>(
   user: T,
@@ -316,7 +315,8 @@ export class UsersService {
   }
 
   /**
-   * All venue (child location) memberships — super_admin Locations admin UI.
+   * All user_location_memberships — super_admin Locations admin UI.
+   * Includes both root (organization) and child venues; booking logic also allows membership on either.
    */
   async findVenueMembershipAssignments(requester: UserRequesterScope) {
     if (requester.role !== "super_admin") {
@@ -328,8 +328,7 @@ export class UsersService {
       .createQueryBuilder("m")
       .innerJoinAndSelect("m.user", "user")
       .leftJoinAndSelect("user.role", "role")
-      .leftJoinAndSelect("m.location", "location")
-      .where("location.kind = :lk", { lk: LocationKind.CHILD })
+      .innerJoinAndSelect("m.location", "location")
       .orderBy("location.name", "ASC")
       .addOrderBy("user.email", "ASC")
       .getMany();
