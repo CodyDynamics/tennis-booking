@@ -12,6 +12,7 @@ import { MembershipTransaction } from "../memberships/entities/membership-transa
 import { CourtBooking } from "../bookings/entities/court-booking.entity";
 import { Area } from "../areas/entities/area.entity";
 import { SeedService } from "./seed.service";
+import { DatabaseConnectionLogger } from "./database-connection-logger.service";
 
 @Module({
   imports: [
@@ -29,7 +30,7 @@ import { SeedService } from "./seed.service";
       Area,
     ]),
   ],
-  providers: [SeedService],
+  providers: [DatabaseConnectionLogger, SeedService],
   exports: [],
 })
 export class DatabaseModule {}

@@ -200,6 +200,11 @@ export class SeedService implements OnModuleInit {
   }
 
   private async seedSportsData() {
+    /** Home map uses `latitude` / `longitude` (or `mapMarkers` JSON) — not `address` alone. */
+    const springparkVenueAddress = "3330 Springpark Way, Garland, TX 75044";
+    const springparkVenueLat = "32.9803489";
+    const springparkVenueLng = "-96.6804175";
+
     let root = await this.locationRepo.findOne({
       where: { name: "Springpark", kind: LocationKind.ROOT },
     });
@@ -207,7 +212,9 @@ export class SeedService implements OnModuleInit {
       root = await this.locationRepo.save(
         this.locationRepo.create({
           name: "Springpark",
-          address: "Dallas, TX",
+          address: springparkVenueAddress,
+          latitude: springparkVenueLat,
+          longitude: springparkVenueLng,
           kind: LocationKind.ROOT,
           parentLocationId: null,
           status: "inactive",
@@ -216,16 +223,26 @@ export class SeedService implements OnModuleInit {
         }),
       );
       console.log(`[SeedService] Created root location: ${root.name}`);
+    } else {
+      await this.locationRepo.update(root.id, {
+        address: springparkVenueAddress,
+        latitude: springparkVenueLat,
+        longitude: springparkVenueLng,
+      });
     }
 
     const locationChildrenData = [
       {
         name: "Springpark A",
-        address: "4714 Baldwin St, Dallas, TX 75210",
+        address: springparkVenueAddress,
+        latitude: springparkVenueLat,
+        longitude: springparkVenueLng,
       },
       {
         name: "Springpark B",
         address: "100 Main St, Dallas, TX 75202",
+        latitude: "32.7767",
+        longitude: "-96.7970",
       },
     ];
 
@@ -240,6 +257,8 @@ export class SeedService implements OnModuleInit {
             kind: LocationKind.CHILD,
             name: child.name,
             address: child.address,
+            latitude: child.latitude,
+            longitude: child.longitude,
             status: "active",
             visibility: LocationVisibility.PUBLIC,
             timezone: "America/Chicago",
@@ -254,6 +273,8 @@ export class SeedService implements OnModuleInit {
           visibility: LocationVisibility.PUBLIC,
           timezone: "America/Chicago",
           address: child.address,
+          latitude: child.latitude,
+          longitude: child.longitude,
         });
       }
     }

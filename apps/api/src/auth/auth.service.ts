@@ -26,9 +26,13 @@ import {
 } from "./dto";
 import { EmailService } from "../email/email.service";
 import { OtpStoreService } from "./otp-store.service";
-import { RegisterPendingStoreService } from "./register-pending-store.service";
+import {
+  RegisterPendingStoreService,
+  type PendingRegisterPayload,
+} from "./register-pending-store.service";
 import { RolesService } from "../roles/roles.service";
 import { UserAccountType } from "../users/entities/user-account-type.enum";
+import { isSendRegistrationEmailEnabled } from "../config/configuration";
 
 @Injectable()
 export class AuthService {
@@ -73,6 +77,21 @@ export class AuthService {
     return [street.trim(), city.trim(), line2].filter(Boolean).join(", ");
   }
 
+  /** User-facing hint when transactional mail fails (e.g. Gmail API invalid_grant). */
+  private mailSendFailureUserMessage(err: unknown): string {
+    const raw = err instanceof Error ? err.message : String(err);
+    if (/unauthorized_client/i.test(raw)) {
+      return "Could not send email: unauthorized_client — the refresh token does not match GOOGLE_CLIENT_ID/SECRET in .env. In OAuth Playground, enable “Use your own OAuth credentials” with the same Client ID and Secret as this app, then generate a new refresh token. Tokens from Playground default credentials will not work with your Cloud Console client.";
+    }
+    if (/invalid_grant/i.test(raw)) {
+      return "Could not send email: Google refresh token expired or revoked (invalid_grant). Regenerate GOOGLE_REFRESH_TOKEN in Google OAuth Playground, or use MAIL_PROVIDER=smtp with a Gmail app password instead of cloud.";
+    }
+    if (/Mail provider is none/i.test(raw)) {
+      return "Email is not configured on the server. Set RESEND_API_KEY or SMTP (EMAIL_HOST, EMAIL_USER, EMAIL_PASSWORD), or use SEND_REGISTRATION_EMAIL=false if OTP by email is not required.";
+    }
+    return "Unable to send verification email. Please try again later or contact support.";
+  }
+
   /** Allow OTP signup if email is new, or matches a membership placeholder (no password yet). */
   private async assertEmailAllowedForRegistrationRequest(
     email: string,
@@ -89,7 +108,8 @@ export class AuthService {
   }
 
   /**
-   * Step 1: validate data, store pending registration, email OTP. User is created after verifyRegisterOtp.
+   * Step 1: validate data; either send email OTP (then user completes via verifyRegisterOtp)
+   * or, when SEND_REGISTRATION_EMAIL is off, create the user and return tokens immediately.
    */
   async requestRegisterOtp(registerDto: RegisterDto) {
     const email = registerDto.email.trim().toLowerCase();
@@ -112,17 +132,31 @@ export class AuthService {
       firstName?.trim() || fullName.trim().split(/\s+/)[0] || null;
     const resolvedLastName =
       lastName?.trim() ||
-      (fullName.trim().split(/\s+/).slice(1).join(" ").trim() || null);
+      fullName.trim().split(/\s+/).slice(1).join(" ").trim() ||
+      null;
     const homeAddress = this.formatHomeAddress(street, city, state, zipCode);
 
-    this.registerPendingStore.set(email, {
+    const pendingFields = {
       passwordHash,
       fullName: fullName.trim(),
       firstName: resolvedFirstName,
       lastName: resolvedLastName,
       phone,
       homeAddress,
-    });
+    };
+
+    if (!isSendRegistrationEmailEnabled()) {
+      this.logger.log(
+        `SEND_REGISTRATION_EMAIL=false: registering ${email} without email OTP`,
+      );
+      const pending: PendingRegisterPayload = {
+        ...pendingFields,
+        expiresAt: Date.now() + 60_000,
+      };
+      return this.completeRegistrationFromPending(email, pending);
+    }
+
+    this.registerPendingStore.set(email, pendingFields);
 
     const length = this.configService.get<number>("otp.loginLength", 6);
     const otp = crypto
@@ -130,6 +164,7 @@ export class AuthService {
       .toString()
       .padStart(length, "0");
     this.otpStore.set("register", email, otp);
+
     try {
       await this.emailService.sendRegistrationOtpEmail(email, otp);
     } catch (err) {
@@ -140,7 +175,7 @@ export class AuthService {
         err instanceof Error ? err.stack : undefined,
       );
       throw new ServiceUnavailableException(
-        "Unable to send verification email. Please try again later or contact support.",
+        this.mailSendFailureUserMessage(err),
       );
     }
 
@@ -163,7 +198,13 @@ export class AuthService {
       throw new UnauthorizedException("Invalid or expired verification code");
     }
     this.registerPendingStore.delete(email);
+    return this.completeRegistrationFromPending(email, pending);
+  }
 
+  private async completeRegistrationFromPending(
+    email: string,
+    pending: PendingRegisterPayload,
+  ) {
     const existing = await this.userRepo.findOne({
       where: { email },
       relations: ["role"],
@@ -361,12 +402,9 @@ export class AuthService {
       }))!;
     }
 
-    const tokens = await this.generateTokens(
-      user.id,
-      user.email,
-      user.roleId,
-      { rememberMe: false },
-    );
+    const tokens = await this.generateTokens(user.id, user.email, user.roleId, {
+      rememberMe: false,
+    });
 
     return {
       user: {
@@ -452,7 +490,7 @@ export class AuthService {
         err instanceof Error ? err.stack : undefined,
       );
       throw new ServiceUnavailableException(
-        "Unable to send verification email. Please try again later or contact support.",
+        this.mailSendFailureUserMessage(err),
       );
     }
     return {
@@ -472,12 +510,9 @@ export class AuthService {
     if (!this.otpStore.consume("login", user.email, otp)) {
       throw new UnauthorizedException("Invalid or expired OTP");
     }
-    const tokens = await this.generateTokens(
-      user.id,
-      user.email,
-      user.roleId,
-      { rememberMe: rememberMe === true },
-    );
+    const tokens = await this.generateTokens(user.id, user.email, user.roleId, {
+      rememberMe: rememberMe === true,
+    });
     return {
       user: {
         id: user.id,
@@ -543,7 +578,9 @@ export class AuthService {
     }
     if (accessToken) {
       try {
-        const decoded = this.jwtService.decode(accessToken) as JwtPayload | null;
+        const decoded = this.jwtService.decode(
+          accessToken,
+        ) as JwtPayload | null;
         if (decoded?.jti && decoded.exp) {
           const nowSec = Math.floor(Date.now() / 1000);
           const ttl = decoded.exp - nowSec;

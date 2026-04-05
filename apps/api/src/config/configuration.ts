@@ -1,5 +1,38 @@
 import * as path from "path";
 
+const SEND_REGISTRATION_EMAIL_OFF = new Set(["false", "0", "no", "off"]);
+
+/** Explicit COOKIE_SECURE overrides NODE_ENV. Required false for plain HTTP (e.g. EC2 by IP). */
+function cookieSecureFromEnv(): boolean {
+  const v = process.env.COOKIE_SECURE?.trim().toLowerCase();
+  if (v === "true" || v === "1" || v === "yes") return true;
+  if (v === "false" || v === "0" || v === "no") return false;
+  return process.env.NODE_ENV === "production";
+}
+
+function cookieSameSiteFromEnv(secure: boolean): "lax" | "strict" | "none" {
+  const env = process.env.COOKIE_SAME_SITE?.trim().toLowerCase() as
+    | "lax"
+    | "strict"
+    | "none"
+    | "";
+  if (env === "lax" || env === "strict" || env === "none") return env;
+  // SameSite=None requires Secure; browsers reject None without Secure — use Lax on HTTP.
+  if (process.env.NODE_ENV === "production" && secure) return "none";
+  return "lax";
+}
+
+/**
+ * Registration OTP email: enabled unless env explicitly turns it off.
+ * Reads `process.env` at call time (not only via ConfigService) so Docker / .env is respected reliably.
+ * Accepts: false, False, FALSE, 0, no, off (trimmed).
+ */
+export function isSendRegistrationEmailEnabled(): boolean {
+  const v = (process.env.SEND_REGISTRATION_EMAIL ?? "").trim().toLowerCase();
+  if (v === "") return true;
+  return !SEND_REGISTRATION_EMAIL_OFF.has(v);
+}
+
 export default () => ({
   port: parseInt(process.env.PORT || process.env.GATEWAY_PORT || "3000", 10),
   database: {
@@ -27,22 +60,19 @@ export default () => ({
     ), // default 15m, match JWT_EXPIRES_IN
     refreshTokenMaxAgeSeconds: 7 * 24 * 60 * 60, // 7d
     sameSite: (() => {
-      const env = process.env.COOKIE_SAME_SITE as
-        | "lax"
-        | "strict"
-        | "none"
-        | undefined;
-      if (env) return env;
-      // Production: default SameSite=None so cookies are sent cross-origin (e.g. frontend Vercel, backend Render).
-      // Set COOKIE_SAME_SITE=lax only if frontend and backend are same origin.
-      if (process.env.NODE_ENV === "production") return "none";
-      return "lax";
+      const secure = cookieSecureFromEnv();
+      return cookieSameSiteFromEnv(secure);
     })(),
-    secure: process.env.NODE_ENV === "production",
+    secure: cookieSecureFromEnv(),
   },
   auth: {
     /** When "true": login uses email OTP after password. Default: false (email + password only). */
     loginOtpEnabled: process.env.LOGIN_OTP_ENABLED === "true",
+    /**
+     * When false: registration does not send the verification email (local/Docker without SMTP).
+     * Non-production: OTP is logged on the server so you can complete signup from the UI.
+     */
+    sendRegistrationEmail: isSendRegistrationEmailEnabled(),
   },
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID,

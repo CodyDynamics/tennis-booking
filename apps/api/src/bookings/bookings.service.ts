@@ -24,7 +24,10 @@ import { BookingMailService } from "../notifications/booking-mail.service";
 import { Area } from "../areas/entities/area.entity";
 import { LocationVisibility } from "../locations/entities/location.enums";
 import { LocationsService } from "../locations/locations.service";
-import { CourtBooking } from "./entities/court-booking.entity";
+import {
+  CourtBooking,
+  CourtBookingStatus,
+} from "./entities/court-booking.entity";
 // (User/Location repos not needed yet; keep imports minimal)
 import { AdminListCourtBookingsQueryDto } from "./dto/admin-list-court-bookings.query.dto";
 import { AdminUpdateCourtBookingDto } from "./dto/admin-update-court-booking.dto";
@@ -51,7 +54,39 @@ export class BookingsService {
     private readonly courtBookingRepo: Repository<CourtBooking>,
   ) {}
 
-  private async assertAreaAccess(userId: string, locationId: string, areaId?: string) {
+  /**
+   * One active court booking per user per calendar day (any location).
+   * Cancelled rows do not count. When rescheduling, pass excludeBookingId so the same row is ignored.
+   */
+  private async assertAtMostOneCourtBookingPerUserPerDay(
+    userId: string,
+    bookingDate: string,
+    excludeBookingId?: string,
+  ): Promise<void> {
+    const day = bookingDate.slice(0, 10);
+    const qb = this.courtBookingRepo
+      .createQueryBuilder("cb")
+      .where("cb.userId = :userId", { userId })
+      .andWhere("cb.bookingDate = :day", { day })
+      .andWhere("cb.bookingStatus != :cancelled", {
+        cancelled: CourtBookingStatus.CANCELLED,
+      });
+    if (excludeBookingId) {
+      qb.andWhere("cb.id != :excludeId", { excludeId: excludeBookingId });
+    }
+    const count = await qb.getCount();
+    if (count > 0) {
+      throw new ConflictException(
+        "You already have a court booking on this date. Only one court booking per day is allowed.",
+      );
+    }
+  }
+
+  private async assertAreaAccess(
+    userId: string,
+    locationId: string,
+    areaId?: string,
+  ) {
     if (!areaId) return;
     const area = await this.areaRepo.findOne({ where: { id: areaId } });
     if (!area || area.locationId !== locationId || area.status !== "active") {
@@ -143,6 +178,10 @@ export class BookingsService {
    */
   async createSlotBooking(userId: string, dto: CreateCourtSlotBookingDto) {
     await this.assertAreaAccess(userId, dto.locationId, dto.areaId);
+    await this.assertAtMostOneCourtBookingPerUserPerDay(
+      userId,
+      dto.bookingDate,
+    );
     const qb = this.courtRepo
       .createQueryBuilder("c")
       .where("c.locationId = :locationId", { locationId: dto.locationId })
@@ -157,7 +196,9 @@ export class BookingsService {
     const courts = await qb.orderBy("c.name", "ASC").getMany();
 
     if (courts.length === 0) {
-      throw new ConflictException("No courts available for this location, sport, and court type.");
+      throw new ConflictException(
+        "No courts available for this location, sport, and court type.",
+      );
     }
 
     // Shuffle courts (random order) to avoid always picking the same one
@@ -179,10 +220,14 @@ export class BookingsService {
     }
 
     if (!assignedCourtId) {
-      throw new ConflictException("All courts are taken for this slot. Please pick another time.");
+      throw new ConflictException(
+        "All courts are taken for this slot. Please pick another time.",
+      );
     }
 
-    const duration = dto.durationMinutes ?? this.getDurationMinutes(dto.startTime, dto.endTime);
+    const duration =
+      dto.durationMinutes ??
+      this.getDurationMinutes(dto.startTime, dto.endTime);
     const result = await this.courtBookingHandler.create({
       userId,
       courtId: assignedCourtId,
@@ -204,8 +249,14 @@ export class BookingsService {
     dto: CreateCourtSlotBookingDto,
   ) {
     await this.assertAreaAccess(userId, dto.locationId, dto.areaId);
+    await this.assertAtMostOneCourtBookingPerUserPerDay(
+      userId,
+      dto.bookingDate,
+      bookingId,
+    );
     const duration =
-      dto.durationMinutes ?? this.getDurationMinutes(dto.startTime, dto.endTime);
+      dto.durationMinutes ??
+      this.getDurationMinutes(dto.startTime, dto.endTime);
     const result = await this.courtBookingHandler.rescheduleSlotBooking(
       userId,
       bookingId,
@@ -277,9 +328,11 @@ export class BookingsService {
       .orderBy("b.bookingDate", "DESC")
       .addOrderBy("b.startTime", "DESC");
 
-    if (q.locationId) qb.andWhere("b.locationId = :locationId", { locationId: q.locationId });
+    if (q.locationId)
+      qb.andWhere("b.locationId = :locationId", { locationId: q.locationId });
     if (q.status) qb.andWhere("b.bookingStatus = :st", { st: q.status });
-    if (q.paymentStatus) qb.andWhere("b.paymentStatus = :ps", { ps: q.paymentStatus });
+    if (q.paymentStatus)
+      qb.andWhere("b.paymentStatus = :ps", { ps: q.paymentStatus });
     if (q.from) qb.andWhere("b.bookingDate >= :from", { from: q.from });
     if (q.to) qb.andWhere("b.bookingDate <= :to", { to: q.to });
     if (q.search?.trim()) {

@@ -63,3 +63,29 @@ Notes:
 - `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` come from OAuth Client in Google API Console.
 - `GOOGLE_REFRESH_TOKEN` is required so backend can refresh access token automatically.
 - `GOOGLE_SENDER_EMAIL` is the Gmail account to send as (`me` is used when omitted).
+
+### Lấy `GOOGLE_REFRESH_TOKEN` bằng OAuth 2.0 Playground
+
+1. **Google Cloud Console** → APIs & Services → **Credentials** → tạo **OAuth client ID** (kiểu *Web application*).  
+   - Thêm **Authorized redirect URI**: `https://developers.google.com/oauthplayground`  
+   - Bật **Gmail API** cho project (APIs & Services → Library → Gmail API → Enable).
+
+2. Mở **[OAuth 2.0 Playground](https://developers.google.com/oauthplayground/)** → biểu tượng **bánh răng** (OAuth 2.0 configuration):
+   - **Access type**: chọn **Offline** (bắt buộc để Google trả `refresh_token`).
+   - **Force prompt**: *Consent screen* (giúp lấy lại refresh token nếu trước đó đã authorize).
+   - Bật **Use your own OAuth credentials** → dán **Client ID** và **Client Secret** từ bước 1.
+
+3. **Step 1 — Select & authorize APIs**  
+   - Trong *Input your own scopes*, dán:  
+     `https://www.googleapis.com/auth/gmail.send`  
+   - **Authorize APIs** → đăng nhập Gmail → **Allow**.
+
+4. **Step 2 — Exchange authorization code for tokens**  
+   - Bấm **Exchange authorization code for tokens**.  
+   - Trong phần **Response**, copy giá trị **`refresh_token`** → đặt vào `.env` là `GOOGLE_REFRESH_TOKEN=...`.
+
+5. Nếu **không thấy `refresh_token`**: Google chỉ trả lần đầu sau khi user consent. Vào [Google Account → Third-party access](https://myaccount.google.com/permissions) → **Revoke** quyền của app / OAuth Playground, rồi lặp lại bước 3–4 với **Offline** + **Consent screen** vẫn bật.
+
+Lỗi **`invalid_grant`** khi gửi mail thường do refresh token hết hiệu lực hoặc client secret đổi — lặp lại các bước trên để tạo refresh token mới.
+
+Lỗi **`unauthorized_client`** khi backend gọi Gmail API: refresh token **phải** được tạo bằng **đúng** cặp `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` trong `.env`. Nếu ở Playground bạn **không** bật **Use your own OAuth credentials** (vẫn dùng client mặc định của Google), token lấy được **không** dùng được với client của project bạn → luôn `unauthorized_client` lúc refresh. Cách sửa: bật “Use your own OAuth credentials”, dán Client ID/Secret trùng với `.env`, authorize lại, đổi `GOOGLE_REFRESH_TOKEN` mới. Kiểm tra không có khoảng trắng thừa hoặc dấu ngoặc khi paste vào `.env`.

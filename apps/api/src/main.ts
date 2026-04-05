@@ -1,3 +1,4 @@
+import "./load-env";
 import { NestFactory } from "@nestjs/core";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
@@ -32,6 +33,9 @@ const cookieParserMiddleware =
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  if (process.env.TRUST_PROXY === "1" || process.env.TRUST_PROXY === "true") {
+    app.getHttpAdapter().getInstance().set("trust proxy", 1);
+  }
   app.useWebSocketAdapter(new AppSocketIoAdapter(app));
   // Force SeedService to run (it is not injected elsewhere, so would never be created)
   await app.get(SeedService);
@@ -72,6 +76,7 @@ async function bootstrap() {
     "http://127.0.0.1:3000",
     "http://127.0.0.1:3001",
     "http://127.0.0.1:3002",
+    "http://44.199.235.11",
   ].filter((url, i, arr) => arr.indexOf(url) === i);
 
   app.enableCors({

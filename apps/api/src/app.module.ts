@@ -1,3 +1,4 @@
+import { join } from "path";
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
@@ -42,43 +43,53 @@ import { NotificationsModule } from "./notifications/notifications.module";
     ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: [".env", ".env.local"],
+      envFilePath: [
+        join(process.cwd(), ".env"),
+        join(process.cwd(), ".env.local"),
+        join(process.cwd(), "backend", ".env"),
+        join(process.cwd(), "backend", ".env.local"),
+        join(process.cwd(), "apps", "api", ".env"),
+        join(process.cwd(), "apps", "api", ".env.local"),
+      ],
       load: [configuration],
       ignoreEnvFile: false,
     }),
 
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (config: ConfigService) => ({
-        type: "postgres",
-        host: config.get<string>("DB_HOST", "localhost"),
-        port: parseInt(config.get<string>("DB_PORT", "5432"), 10),
-        username: config.get<string>("DB_USER", "postgres"),
-        password: config.get<string>("DB_PASS", "postgres"),
-        database: config.get<string>("DB_NAME", "booking_tennis"),
-        entities: [
-          User,
-          Role,
-          PasswordResetToken,
-          RefreshToken,
-          Location,
-          LocationBookingWindow,
-          Area,
-          Court,
-          UserLocationMembership,
-          MembershipTransaction,
-          Sport,
-          Coach,
-          CourtBooking,
-          CoachSession,
-          BookingCommand,
-        ],
-        // On Render/production, set DB_SYNC=true so TypeORM creates tables (no migrations yet). Can set DB_SYNC=false after first deploy.
-        synchronize:
-          config.get<string>("DB_SYNC") === "true" ||
-          config.get<string>("NODE_ENV") !== "production",
-        logging: config.get<string>("DB_LOGGING", "false") === "true",
-      }),
+      useFactory: (config: ConfigService) => {
+        return {
+          type: "postgres",
+          host: config.get<string>("DB_HOST", "localhost"),
+          port: parseInt(config.get<string>("DB_PORT", "5432"), 10),
+          username: config.get<string>("DB_USER", "postgres"),
+          password: config.get<string>("DB_PASS", "postgres"),
+          database: config.get<string>("DB_NAME", "booking_tennis"),
+          ssl: { rejectUnauthorized: false },
+          entities: [
+            User,
+            Role,
+            PasswordResetToken,
+            RefreshToken,
+            Location,
+            LocationBookingWindow,
+            Area,
+            Court,
+            UserLocationMembership,
+            MembershipTransaction,
+            Sport,
+            Coach,
+            CourtBooking,
+            CoachSession,
+            BookingCommand,
+          ],
+          // On Render/production, set DB_SYNC=true so TypeORM creates tables (no migrations yet). Can set DB_SYNC=false after first deploy.
+          synchronize:
+            config.get<string>("DB_SYNC") === "true" ||
+            config.get<string>("NODE_ENV") !== "production",
+          logging: config.get<string>("DB_LOGGING", "false") === "true",
+        };
+      },
       inject: [ConfigService],
     }),
 

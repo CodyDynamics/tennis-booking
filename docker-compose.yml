@@ -1,6 +1,10 @@
 # Backend stack: Postgres, Redis, API
 # From backend/: docker compose up -d --build
 #
+# Đăng ký: mặc định SEND_REGISTRATION_EMAIL=false (không SMTP trong compose) → user được tạo ngay, không OTP email.
+# SEND_REGISTRATION_EMAIL=true: cần mail hợp lệ — gợi ý MAIL_PROVIDER=smtp + EMAIL_* (app password Gmail),
+# hoặc RESEND_API_KEY, hoặc MAIL_PROVIDER=cloud + GOOGLE_REFRESH_TOKEN (nếu invalid_grant → tạo lại token ở OAuth Playground).
+#
 # Truy cập từ máy khác / Internet:
 # - Publish port: mặc định 0.0.0.0:${API_HOST_PORT:-3000} → mở firewall OS + router (nếu cần) + security group (cloud).
 # - CORS: đặt FRONTEND_URL (URL frontend thật) và/hoặc CORS_ORIGINS (danh sách URL cách nhau bởi dấu phẩy).
@@ -65,6 +69,10 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-http://localhost:3000/auth/google/callback}
+      # Chỉ khi MAIL_PROVIDER=cloud (Gmail API gửi mail). invalid_grant = refresh token hết hạn, cần tạo lại.
+      GOOGLE_REFRESH_TOKEN: ${GOOGLE_REFRESH_TOKEN:-}
+      GOOGLE_SENDER_EMAIL: ${GOOGLE_SENDER_EMAIL:-}
+      GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-https://developers.google.com/oauthplayground}
       EMAIL_HOST: ${EMAIL_HOST:-}
       EMAIL_PORT: ${EMAIL_PORT:-587}
       EMAIL_SECURE: ${EMAIL_SECURE:-false}
@@ -76,6 +84,8 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3001}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       LOGIN_OTP_ENABLED: ${LOGIN_OTP_ENABLED:-false}
+      # false (default): đăng ký xong ngay. true: cần SMTP, Resend, hoặc cloud + GOOGLE_REFRESH_TOKEN hợp lệ.
+      SEND_REGISTRATION_EMAIL: ${SEND_REGISTRATION_EMAIL:-false}
       REDIS_ENABLED: ${REDIS_ENABLED:-false}
       DB_SYNC: ${DB_SYNC:-true}
     ports:

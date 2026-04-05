@@ -209,7 +209,10 @@ describe("AuthService", () => {
         expect.any(String),
       );
       expect(emailService.sendRegistrationOtpEmail).toHaveBeenCalled();
-      expect(result.message).toContain("verification code");
+      expect("message" in result).toBe(true);
+      if ("message" in result) {
+        expect(result.message).toContain("verification code");
+      }
     });
 
     it("should throw BadRequestException when email already exists", async () => {
@@ -219,6 +222,45 @@ describe("AuthService", () => {
         BadRequestException,
       );
       expect(registerPendingStore.set).not.toHaveBeenCalled();
+    });
+
+    it("should complete registration without OTP when SEND_REGISTRATION_EMAIL is off", async () => {
+      userRepo.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          ...mockUser,
+          id: "new-id",
+          email: "new@example.com",
+          fullName: "New User",
+          roleId: "player-role-id",
+          role: { id: "player-role-id", name: "player" },
+        });
+      userRepo.save.mockResolvedValue({
+        ...mockUser,
+        id: "new-id",
+        email: "new@example.com",
+        roleId: "player-role-id",
+      });
+      const prev = process.env.SEND_REGISTRATION_EMAIL;
+      process.env.SEND_REGISTRATION_EMAIL = "false";
+      try {
+        const result = await service.requestRegisterOtp(registerDto);
+
+        expect(emailService.sendRegistrationOtpEmail).not.toHaveBeenCalled();
+        expect(registerPendingStore.set).not.toHaveBeenCalled();
+        expect(otpStore.set).not.toHaveBeenCalled();
+        expect(userRepo.save).toHaveBeenCalled();
+        expect(jwtService.signAsync).toHaveBeenCalled();
+        expect(result).toHaveProperty("accessToken", "token");
+        expect(result).toHaveProperty("user");
+      } finally {
+        if (prev === undefined) {
+          delete process.env.SEND_REGISTRATION_EMAIL;
+        } else {
+          process.env.SEND_REGISTRATION_EMAIL = prev;
+        }
+      }
     });
   });
 

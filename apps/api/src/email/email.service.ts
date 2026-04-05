@@ -26,7 +26,7 @@ export class EmailService {
   }
 
   async sendRegistrationOtpEmail(to: string, otp: string) {
-    const ok = await this.mailSender.sendHtml({
+    await this.mailSender.sendHtml({
       to,
       subject: "Verify your email to complete registration",
       html: `
@@ -36,17 +36,13 @@ export class EmailService {
           <p>This code expires in a few minutes. Do not share it with anyone.</p>
           <p>If you didn&apos;t sign up, you can ignore this email.</p>
         `,
+      throwOnFailure: true,
     });
-    if (ok) {
-      this.logger.log(`Registration OTP email sent to ${to}`);
-    } else {
-      this.logger.error(`Failed to send registration OTP email to ${to}`);
-      throw new Error("Failed to send registration OTP email");
-    }
+    this.logger.log(`Registration OTP email sent to ${to}`);
   }
 
   async sendLoginOtpEmail(to: string, otp: string) {
-    const ok = await this.mailSender.sendHtml({
+    await this.mailSender.sendHtml({
       to,
       subject: "Your login verification code",
       html: `
@@ -56,12 +52,8 @@ export class EmailService {
           <p>This code expires in a few minutes. Do not share it with anyone.</p>
           <p>If you didn't request this, please ignore this email.</p>
         `,
+      throwOnFailure: true,
     });
-    if (ok) {
-      this.logger.log(`Login OTP email sent to ${to}`);
-    } else {
-      this.logger.error(`Failed to send login OTP email to ${to}`);
-      throw new Error("Failed to send login OTP email");
-    }
+    this.logger.log(`Login OTP email sent to ${to}`);
   }
 }
