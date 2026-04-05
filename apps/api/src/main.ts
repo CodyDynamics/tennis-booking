@@ -1,3 +1,4 @@
+import "./load-env";
 import { NestFactory } from "@nestjs/core";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";

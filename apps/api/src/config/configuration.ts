@@ -13,23 +13,6 @@ export function isSendRegistrationEmailEnabled(): boolean {
   return !SEND_REGISTRATION_EMAIL_OFF.has(v);
 }
 
-console.log("process.env.CORS_ORIGINS", process.env.CORS_ORIGINS);
-console.log("process.env.FRONTEND_URL", process.env.FRONTEND_URL);
-console.log("process.env.GOOGLE_CLIENT_ID", process.env.GOOGLE_CLIENT_ID);
-console.log(
-  "process.env.GOOGLE_CLIENT_SECRET",
-  process.env.GOOGLE_CLIENT_SECRET,
-);
-console.log("process.env.GOOGLE_CALLBACK_URL", process.env.GOOGLE_CALLBACK_URL);
-console.log(
-  "process.env.GOOGLE_REFRESH_TOKEN",
-  process.env.GOOGLE_REFRESH_TOKEN,
-);
-console.log("process.env.GOOGLE_SENDER_EMAIL", process.env.GOOGLE_SENDER_EMAIL);
-console.log(
-  "process.env.GOOGLE_OAUTH_REDIRECT_URI",
-  process.env.GOOGLE_OAUTH_REDIRECT_URI,
-);
 export default () => ({
   port: parseInt(process.env.PORT || process.env.GATEWAY_PORT || "3000", 10),
   database: {

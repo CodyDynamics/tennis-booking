@@ -1,3 +1,4 @@
+import { join } from "path";
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
@@ -42,7 +43,14 @@ import { NotificationsModule } from "./notifications/notifications.module";
     ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: [".env", ".env.local"],
+      envFilePath: [
+        join(process.cwd(), ".env"),
+        join(process.cwd(), ".env.local"),
+        join(process.cwd(), "backend", ".env"),
+        join(process.cwd(), "backend", ".env.local"),
+        join(process.cwd(), "apps", "api", ".env"),
+        join(process.cwd(), "apps", "api", ".env.local"),
+      ],
       load: [configuration],
       ignoreEnvFile: false,
     }),
@@ -61,7 +69,7 @@ import { NotificationsModule } from "./notifications/notifications.module";
           username: config.get<string>("DB_USER", "postgres"),
           password: config.get<string>("DB_PASS", "postgres"),
           database: config.get<string>("DB_NAME", "booking_tennis"),
-          // ssl: { rejectUnauthorized: false },
+          ssl: { rejectUnauthorized: false },
           entities: [
             User,
             Role,
@@ -130,4 +138,4 @@ import { NotificationsModule } from "./notifications/notifications.module";
   controllers: [],
   providers: [],
 })
-export class AppModule {}
+export class AppModule { }
