@@ -88,7 +88,7 @@ export function renderBookingConfirmationEmail(
     <p style="margin:16px 0 0;font-size:14px;color:#64748b;">If the button does not work, copy this link:<br /><span style="word-break:break-all;">${escapeHtml(input.venueCourtsUrl)}</span></p>
     ${
       input.bookingHistoryUrl
-        ? `<p style="margin:12px 0 0;font-size:14px;color:#64748b;"><a href="${escapeHtml(input.bookingHistoryUrl)}" style="color:#0f766e;"></a></p>`
+        ? `<p style="margin:12px 0 0;font-size:14px;color:#64748b;"><a href="${escapeHtml(input.bookingHistoryUrl)}" style="color:#0f766e;font-weight:600;">View your bookings</a></p>`
         : ""
     }
   `;
@@ -123,7 +123,7 @@ export function renderBookingCancelledEmail(
     </p>
     ${
       input.bookingHistoryUrl
-        ? `<p style="margin:12px 0 0;font-size:14px;color:#64748b;"><a href="${escapeHtml(input.bookingHistoryUrl)}" style="color:#0f766e;"></a></p>`
+        ? `<p style="margin:12px 0 0;font-size:14px;color:#64748b;"><a href="${escapeHtml(input.bookingHistoryUrl)}" style="color:#0f766e;font-weight:600;">View your bookings</a></p>`
         : ""
     }
   `;
@@ -158,7 +158,7 @@ export function renderBookingReminder30mEmail(
     </p>
     ${
       input.bookingHistoryUrl
-        ? `<p style="margin:12px 0 0;font-size:14px;color:#64748b;"><a href="${escapeHtml(input.bookingHistoryUrl)}" style="color:#0f766e;"></a></p>`
+        ? `<p style="margin:12px 0 0;font-size:14px;color:#64748b;"><a href="${escapeHtml(input.bookingHistoryUrl)}" style="color:#0f766e;font-weight:600;">View your bookings</a></p>`
         : ""
     }
   `;
