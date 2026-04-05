@@ -72,6 +72,7 @@ async function bootstrap() {
     "http://127.0.0.1:3000",
     "http://127.0.0.1:3001",
     "http://127.0.0.1:3002",
+    "http://44.199.235.11",
   ].filter((url, i, arr) => arr.indexOf(url) === i);
 
   app.enableCors({
