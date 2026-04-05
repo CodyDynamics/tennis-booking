@@ -58,10 +58,6 @@ import { NotificationsModule } from "./notifications/notifications.module";
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => {
-        console.log(
-          "process.env (before DB connect)",
-          JSON.stringify(process.env, null, 2),
-        );
         return {
           type: "postgres",
           host: config.get<string>("DB_HOST", "localhost"),

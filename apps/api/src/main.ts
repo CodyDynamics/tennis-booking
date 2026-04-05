@@ -62,7 +62,6 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter());
 
   const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-  console.log("process.env.CORS_ORIGINS", process.env.CORS_ORIGINS);
   const corsOriginsExtra = (process.env.CORS_ORIGINS ?? "")
     .split(",")
     .map((s) => s.trim())
