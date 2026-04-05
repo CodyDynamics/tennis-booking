@@ -33,6 +33,9 @@ const cookieParserMiddleware =
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  if (process.env.TRUST_PROXY === "1" || process.env.TRUST_PROXY === "true") {
+    app.getHttpAdapter().getInstance().set("trust proxy", 1);
+  }
   app.useWebSocketAdapter(new AppSocketIoAdapter(app));
   // Force SeedService to run (it is not injected elsewhere, so would never be created)
   await app.get(SeedService);

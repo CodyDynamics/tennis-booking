@@ -138,4 +138,4 @@ import { NotificationsModule } from "./notifications/notifications.module";
   controllers: [],
   providers: [],
 })
-export class AppModule { }
+export class AppModule {}
