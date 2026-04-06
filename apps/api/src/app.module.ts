@@ -65,7 +65,7 @@ import { NotificationsModule } from "./notifications/notifications.module";
           username: config.get<string>("DB_USER", "postgres"),
           password: config.get<string>("DB_PASS", "postgres"),
           database: config.get<string>("DB_NAME", "booking_tennis"),
-          // ssl: { rejectUnauthorized: true },
+          ssl: { rejectUnauthorized: false },
           entities: [
             User,
             Role,
