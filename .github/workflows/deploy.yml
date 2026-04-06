@@ -18,7 +18,7 @@ jobs:
           script: |
             echo "🚀 Starting deployment..."
 
-            cd /home/ec2-user/tennis-booking
+            cd /home/ec2-user/tennis-booking-backend
 
             echo "📥 Pulling latest code..."
             git pull origin main
