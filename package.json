@@ -9,7 +9,7 @@
     "build": "nest build",
     "build:render": "NODE_ENV=development pnpm install && pnpm run build",
     "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\"",
-    "start": "nest start",
+    "start": "nest start api",
     "start:dev": "nest start api --watch",
     "start:debug": "nest start api --debug --watch",
     "start:prod": "node dist/apps/api/src/main",
