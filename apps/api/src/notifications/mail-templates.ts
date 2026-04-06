@@ -3,6 +3,7 @@ import { escapeHtml, renderMailLayout } from "./mail-layout";
 /** Named templates for logging / future i18n or admin previews. */
 export const MailTemplateId = {
   BOOKING_CONFIRMATION: "booking_confirmation",
+  BOOKING_CONFIRMATION_ADMIN_MULTI: "booking_confirmation_admin_multi",
   BOOKING_REMINDER_30M: "booking_reminder_30m",
   BOOKING_CANCELLED: "booking_cancelled",
 } as const;
@@ -41,6 +42,18 @@ export interface BookingCancelledTemplateInput {
   locationName: string;
   courtName: string;
   dateTimeRangeLabel: string;
+  venueCourtsUrl: string;
+  bookingHistoryUrl?: string;
+  footerHtml?: string;
+}
+
+/** Admin calendar: one email summarizing multiple court bookings (same court & time window per day). */
+export interface AdminMultiDateBookingConfirmationInput {
+  userDisplayName: string;
+  locationName: string;
+  courtName: string;
+  /** Sorted rows: human-readable date + time range at venue */
+  scheduleLines: string[];
   venueCourtsUrl: string;
   bookingHistoryUrl?: string;
   footerHtml?: string;
@@ -95,6 +108,54 @@ export function renderBookingConfirmationEmail(
   return {
     templateId: MailTemplateId.BOOKING_CONFIRMATION,
     subject: formatSubjectConfirmation(input.variant),
+    html: renderMailLayout({
+      title,
+      bodyHtml,
+      footerHtml: input.footerHtml,
+    }),
+  };
+}
+
+export function renderAdminMultiDateBookingConfirmationEmail(
+  input: AdminMultiDateBookingConfirmationInput,
+): {
+  templateId: typeof MailTemplateId.BOOKING_CONFIRMATION_ADMIN_MULTI;
+  subject: string;
+  html: string;
+} {
+  const n = input.scheduleLines.length;
+  const subject =
+    n === 1
+      ? "Your court booking is confirmed"
+      : `Your court bookings are confirmed (${n} dates)`;
+  const title = n === 1 ? "Booking confirmed" : `${n} bookings confirmed`;
+  const listItems = input.scheduleLines
+    .map((line) => `<li style="margin:4px 0;">${escapeHtml(line)}</li>`)
+    .join("");
+  const bodyHtml = `
+    <p style="margin:0 0 12px;">Hi ${escapeHtml(input.userDisplayName)},</p>
+    <p style="margin:0 0 12px;">Thanks for booking with us. Here are your confirmed session${n === 1 ? "" : "s"}:</p>
+    <ul style="margin:0 0 16px;padding-left:20px;color:#334155;">
+      <li><strong>Venue:</strong> ${escapeHtml(input.locationName)}</li>
+      <li><strong>Court:</strong> ${escapeHtml(input.courtName)}</li>
+    </ul>
+    <p style="margin:0 0 8px;font-weight:600;color:#0f172a;">Dates &amp; times</p>
+    <ul style="margin:0 0 16px;padding-left:20px;color:#334155;list-style-type:disc;">
+      ${listItems}
+    </ul>
+    <p style="margin:16px 0 0;">
+      <a href="${escapeHtml(input.venueCourtsUrl)}" style="display:inline-block;background:#0f766e;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600;">Open this venue &amp; courts</a>
+    </p>
+    <p style="margin:16px 0 0;font-size:14px;color:#64748b;">If the button does not work, copy this link:<br /><span style="word-break:break-all;">${escapeHtml(input.venueCourtsUrl)}</span></p>
+    ${
+      input.bookingHistoryUrl
+        ? `<p style="margin:12px 0 0;font-size:14px;color:#64748b;"><a href="${escapeHtml(input.bookingHistoryUrl)}" style="color:#0f766e;font-weight:600;">View your bookings</a></p>`
+        : ""
+    }
+  `;
+  return {
+    templateId: MailTemplateId.BOOKING_CONFIRMATION_ADMIN_MULTI,
+    subject,
     html: renderMailLayout({
       title,
       bodyHtml,

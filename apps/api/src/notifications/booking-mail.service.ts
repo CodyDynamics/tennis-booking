@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 import { ConfigService } from "@nestjs/config";
 import {
   CourtBooking,
@@ -10,6 +10,7 @@ import { MailSenderService } from "./mail-sender.service";
 import {
   formatBookingTimeRangeShort,
   renderBookingConfirmationEmail,
+  renderAdminMultiDateBookingConfirmationEmail,
   renderBookingCancelledEmail,
   renderBookingReminder30mEmail,
 } from "./mail-templates";
@@ -98,6 +99,86 @@ export class BookingMailService {
       });
     } catch (e) {
       this.logger.error(`sendBookingConfirmation failed for ${bookingId}`, e);
+    }
+  }
+
+  /**
+   * One email listing several court bookings (admin calendar multi-date / recurring).
+   * Only includes rows that were successfully created; same recipient and venue context as first booking.
+   */
+  async sendAdminMultiDateBookingConfirmation(
+    bookingIds: string[],
+  ): Promise<void> {
+    if (!bookingIds.length) return;
+    try {
+      const bookings = await this.courtBookingRepo.find({
+        where: { id: In(bookingIds) },
+        relations: { user: true, court: true, location: true },
+        order: { bookingDate: "ASC", startTime: "ASC" },
+      });
+      if (!bookings.length) {
+        this.logger.warn("Multi-date confirmation: no rows loaded");
+        return;
+      }
+      const email = bookings[0].user?.email;
+      if (!email) {
+        this.logger.warn("Multi-date confirmation: no recipient email");
+        return;
+      }
+      const userId = bookings[0].userId;
+      if (bookings.some((b) => b.userId !== userId)) {
+        this.logger.warn("Multi-date confirmation: mixed users; skip send");
+        return;
+      }
+      if (bookings.length !== bookingIds.length) {
+        this.logger.warn(
+          `Multi-date confirmation: expected ${bookingIds.length} rows, got ${bookings.length}`,
+        );
+      }
+      const scheduleLines: string[] = [];
+      for (const b of bookings) {
+        if (
+          b.bookingStatus === CourtBookingStatus.CANCELLED ||
+          b.bookingStatus === CourtBookingStatus.COMPLETED
+        ) {
+          continue;
+        }
+        const startAt = b.bookingStartAt;
+        const endAt = b.bookingEndAt;
+        if (!startAt || !endAt) continue;
+        const tz = b.location?.timezone || "UTC";
+        const datePart = new Intl.DateTimeFormat("en-US", {
+          timeZone: tz,
+          weekday: "long",
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        }).format(startAt);
+        const timeRange = formatBookingTimeRangeShort(startAt, endAt, tz);
+        scheduleLines.push(`${datePart} · ${timeRange}`);
+      }
+      if (!scheduleLines.length) {
+        this.logger.warn("Multi-date confirmation: no schedule lines");
+        return;
+      }
+      const { subject, html } = renderAdminMultiDateBookingConfirmationEmail({
+        userDisplayName: bookings[0].user?.fullName || "there",
+        locationName: bookings[0].location?.name || "Venue",
+        courtName: bookings[0].court?.name || "Court",
+        scheduleLines,
+        venueCourtsUrl: this.venueCourtsUrl(bookings[0]),
+        bookingHistoryUrl: this.bookingHistoryUrl(),
+      });
+      await this.mailSender.sendHtml({
+        to: email,
+        subject,
+        html,
+      });
+    } catch (e) {
+      this.logger.error(
+        `sendAdminMultiDateBookingConfirmation failed for ${bookingIds.length} ids`,
+        e,
+      );
     }
   }
 

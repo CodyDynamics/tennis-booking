@@ -56,6 +56,10 @@ export class CourtBooking {
   @Column({ type: "uuid", nullable: true })
   locationBookingWindowId: string | null;
 
+  /** Admin calendar: same UUID across rows from one multi-date / recurring submit (cancel-series). */
+  @Column({ type: "uuid", nullable: true })
+  adminCalendarSeriesId: string | null;
+
   @Column({ type: "varchar", default: CourtPricingTier.PUBLIC })
   pricingTier: CourtPricingTier;
 

@@ -8,6 +8,7 @@ import {
   Query,
   Delete,
   UseGuards,
+  ForbiddenException,
 } from "@nestjs/common";
 import {
   ApiTags,
@@ -32,6 +33,8 @@ import { CurrentUser } from "@app/common";
 import { PermissionsGuard, RequirePermission } from "@app/common";
 import { AdminListCourtBookingsQueryDto } from "./dto/admin-list-court-bookings.query.dto";
 import { AdminUpdateCourtBookingDto } from "./dto/admin-update-court-booking.dto";
+import { AdminCreateCourtBookingDto } from "./dto/admin-create-court-booking.dto";
+import { AdminCreateCourtBookingBatchDto } from "./dto/admin-create-court-booking-batch.dto";
 
 @ApiTags("Bookings")
 @Controller("bookings")
@@ -184,16 +187,81 @@ export class BookingsController {
     return this.bookingsService.adminListCourtBookings(query);
   }
 
+  @Post("admin/court")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission("bookings:update")
+  @ApiBearerAuth("JWT")
+  @ApiOperation({
+    summary:
+      "Admin court calendar: create booking (bypasses same-day past start time in venue TZ). Optional series id for recurring / multi-date.",
+  })
+  adminCreateCourt(
+    @Body() dto: AdminCreateCourtBookingDto,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.bookingsService.adminCreateCourtCalendarBooking(user.id, dto);
+  }
+
+  @Post("admin/court/batch")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission("bookings:update")
+  @ApiBearerAuth("JWT")
+  @ApiOperation({
+    summary:
+      "Admin court calendar: create the same time slot on many dates. Optional single summary email when sendConfirmationEmail is true.",
+  })
+  adminCreateCourtBatch(
+    @Body() dto: AdminCreateCourtBookingBatchDto,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.bookingsService.adminCreateCourtCalendarBatch(user.id, dto);
+  }
+
+  @Post("admin/court/series/:seriesId/cancel")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission("bookings:update")
+  @ApiBearerAuth("JWT")
+  @ApiOperation({
+    summary:
+      "Admin: cancel all pending/confirmed court bookings sharing adminCalendarSeriesId (no per-booking emails).",
+  })
+  adminCancelCourtSeries(@Param("seriesId") seriesId: string) {
+    return this.bookingsService.adminCancelCourtBookingSeries(seriesId);
+  }
+
   @Patch("admin/court/:id")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermission("bookings:update")
   @ApiBearerAuth("JWT")
-  @ApiOperation({ summary: "Admin: update court booking status/paymentStatus" })
+  @ApiOperation({
+    summary:
+      "Admin: update court booking (status/payment) or reschedule (bookingDate + startTime + endTime)",
+  })
   adminUpdateCourt(
     @Param("id") id: string,
     @Body() body: AdminUpdateCourtBookingDto,
   ) {
     return this.bookingsService.adminUpdateCourtBooking(id, body);
+  }
+
+  @Post("admin/court/:id/cancel")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermission("bookings:update")
+  @ApiBearerAuth("JWT")
+  @ApiOperation({
+    summary:
+      "super_admin only: cancel any court booking (no owner check). Sends cancellation email.",
+  })
+  adminCancelCourt(
+    @Param("id") id: string,
+    @CurrentUser() user: { role: string | null },
+  ) {
+    if (user.role !== "super_admin") {
+      throw new ForbiddenException(
+        "Only super administrators can cancel bookings from the admin calendar",
+      );
+    }
+    return this.bookingsService.adminCancelCourtBooking(id);
   }
 
   @Get(":kind(court|coach)/:id")

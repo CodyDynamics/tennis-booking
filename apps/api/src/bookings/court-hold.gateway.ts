@@ -273,4 +273,24 @@ export class CourtHoldGateway implements OnGatewayConnection, OnGatewayDisconnec
     const holdCounts = await this.redis.getSlotHoldCounts(locationId);
     this.server.to(`location:${locationId}`).emit("slot:update", { holdCounts });
   }
+
+  /**
+   * Call from BookingsService after HTTP create/update/cancel so every client in
+   * `location:{id}` (e.g. /locations/:id/courts) refetches slots and bookings — not only the browser that emitted slot:booked.
+   */
+  broadcastCourtBookingMutated(
+    locationId: string,
+    detail: {
+      bookingDate: string;
+      courtId?: string;
+      sport?: string | null;
+      courtType?: string | null;
+    },
+  ) {
+    if (!locationId?.trim()) return;
+    this.server.to(`location:${locationId}`).emit("availability:changed", detail);
+    this.logger.debug(
+      `HTTP booking mutation → availability:changed location:${locationId} ${detail.bookingDate}`,
+    );
+  }
 }

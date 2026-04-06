@@ -4,13 +4,16 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  HttpException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 import { CourtBookingHandler } from "./handlers/court-booking.handler";
 import { CoachSessionHandler } from "./handlers/coach-session.handler";
 import { CourtWizardAvailabilityService } from "./court-wizard-availability.service";
 import { CreateCourtBookingDto } from "./dto/create-court-booking.dto";
+import { AdminCreateCourtBookingDto } from "./dto/admin-create-court-booking.dto";
+import { AdminCreateCourtBookingBatchDto } from "./dto/admin-create-court-booking-batch.dto";
 import { CreateCoachSessionDto } from "./dto/create-coach-session.dto";
 import { CreateCourtSlotBookingDto } from "./dto/create-court-slot-booking.dto";
 import {
@@ -18,7 +21,10 @@ import {
   CourtWizardWindowsQueryDto,
   CourtSlotQueryDto,
 } from "./dto/court-wizard-query.dto";
-import { BookingKind } from "./interfaces/booking-handler.interface";
+import {
+  BookingKind,
+  CreateBookingResult,
+} from "./interfaces/booking-handler.interface";
 import { Court } from "../courts/entities/court.entity";
 import { BookingMailService } from "../notifications/booking-mail.service";
 import { Area } from "../areas/entities/area.entity";
@@ -31,6 +37,7 @@ import {
 // (User/Location repos not needed yet; keep imports minimal)
 import { AdminListCourtBookingsQueryDto } from "./dto/admin-list-court-bookings.query.dto";
 import { AdminUpdateCourtBookingDto } from "./dto/admin-update-court-booking.dto";
+import { CourtHoldGateway } from "./court-hold.gateway";
 
 /**
  * Booking Service (Parent / Facade).
@@ -52,6 +59,7 @@ export class BookingsService {
     private readonly areaRepo: Repository<Area>,
     @InjectRepository(CourtBooking)
     private readonly courtBookingRepo: Repository<CourtBooking>,
+    private readonly courtHoldGateway: CourtHoldGateway,
   ) {}
 
   /**
@@ -120,7 +128,126 @@ export class BookingsService {
       locationBookingWindowId: dto.locationBookingWindowId,
     });
     void this.bookingMailService.sendBookingConfirmation(result.id, "created");
+    const court = await this.courtRepo.findOne({ where: { id: dto.courtId } });
+    if (court?.locationId) {
+      const sport = court.sports?.[0] ?? null;
+      const courtType = court.courtTypes?.[0] ?? null;
+      this.courtHoldGateway.broadcastCourtBookingMutated(court.locationId, {
+        bookingDate: dto.bookingDate.slice(0, 10),
+        courtId: dto.courtId,
+        sport,
+        courtType,
+      });
+    }
     return result;
+  }
+
+  /**
+   * Admin court calendar: create with bypass of “start time already passed today” in venue TZ,
+   * and optional series id for cancel-all.
+   */
+  async adminCreateCourtCalendarBooking(
+    userId: string,
+    dto: AdminCreateCourtBookingDto,
+  ) {
+    const duration =
+      dto.durationMinutes ??
+      this.getDurationMinutes(dto.startTime, dto.endTime);
+    const result = await this.courtBookingHandler.create({
+      userId,
+      courtId: dto.courtId,
+      bookingDate: dto.bookingDate,
+      startTime: dto.startTime,
+      endTime: dto.endTime,
+      coachId: dto.coachId,
+      durationMinutes: duration,
+      locationBookingWindowId: dto.locationBookingWindowId,
+      bypassVenuePastStartCheck: true,
+      adminCalendarSeriesId: dto.adminCalendarSeriesId ?? null,
+    });
+    if (dto.sendConfirmationEmail === true) {
+      void this.bookingMailService.sendBookingConfirmation(result.id, "created");
+    }
+    const court = await this.courtRepo.findOne({ where: { id: dto.courtId } });
+    if (court?.locationId) {
+      const sport = court.sports?.[0] ?? null;
+      const courtType = court.courtTypes?.[0] ?? null;
+      this.courtHoldGateway.broadcastCourtBookingMutated(court.locationId, {
+        bookingDate: dto.bookingDate.slice(0, 10),
+        courtId: dto.courtId,
+        sport,
+        courtType,
+      });
+    }
+    return result;
+  }
+
+  /**
+   * Admin calendar: create many dates in one request. Optionally one summary email for all successes.
+   */
+  async adminCreateCourtCalendarBatch(
+    userId: string,
+    dto: AdminCreateCourtBookingBatchDto,
+  ): Promise<{
+    created: CreateBookingResult[];
+    errors: { bookingDate: string; message: string }[];
+  }> {
+    const uniqueSorted = [
+      ...new Set(dto.bookingDates.map((d) => d.slice(0, 10))),
+    ].sort();
+    const duration =
+      dto.durationMinutes ??
+      this.getDurationMinutes(dto.startTime, dto.endTime);
+    const created: CreateBookingResult[] = [];
+    const errors: { bookingDate: string; message: string }[] = [];
+
+    for (const bookingDate of uniqueSorted) {
+      try {
+        const result = await this.courtBookingHandler.create({
+          userId,
+          courtId: dto.courtId,
+          bookingDate,
+          startTime: dto.startTime,
+          endTime: dto.endTime,
+          durationMinutes: duration,
+          bypassVenuePastStartCheck: true,
+          adminCalendarSeriesId: dto.adminCalendarSeriesId ?? null,
+        });
+        created.push(result);
+        const court = await this.courtRepo.findOne({
+          where: { id: dto.courtId },
+        });
+        if (court?.locationId) {
+          const sport = court.sports?.[0] ?? null;
+          const courtType = court.courtTypes?.[0] ?? null;
+          this.courtHoldGateway.broadcastCourtBookingMutated(court.locationId, {
+            bookingDate: bookingDate.slice(0, 10),
+            courtId: dto.courtId,
+            sport,
+            courtType,
+          });
+        }
+      } catch (e: unknown) {
+        let message = "Failed";
+        if (e instanceof HttpException) {
+          const r = e.getResponse();
+          if (typeof r === "string") message = r;
+          else if (typeof r === "object" && r && "message" in r) {
+            const m = (r as { message: string | string[] }).message;
+            message = Array.isArray(m) ? m.join(", ") : String(m);
+          }
+        } else if (e instanceof Error) message = e.message;
+        errors.push({ bookingDate, message });
+      }
+    }
+
+    if (dto.sendConfirmationEmail === true && created.length > 0) {
+      void this.bookingMailService.sendAdminMultiDateBookingConfirmation(
+        created.map((r) => r.id),
+      );
+    }
+
+    return { created, errors };
   }
 
   async getCourtAvailability(
@@ -239,6 +366,12 @@ export class BookingsService {
       sport: dto.sport,
     });
     void this.bookingMailService.sendBookingConfirmation(result.id, "created");
+    this.courtHoldGateway.broadcastCourtBookingMutated(dto.locationId, {
+      bookingDate: dto.bookingDate.slice(0, 10),
+      courtId: assignedCourtId,
+      sport: dto.sport,
+      courtType: dto.courtType,
+    });
     return result;
   }
 
@@ -275,6 +408,11 @@ export class BookingsService {
       result.id,
       "rescheduled",
     );
+    this.courtHoldGateway.broadcastCourtBookingMutated(dto.locationId, {
+      bookingDate: dto.bookingDate.slice(0, 10),
+      sport: dto.sport,
+      courtType: dto.courtType,
+    });
     return result;
   }
 
@@ -310,8 +448,23 @@ export class BookingsService {
 
   async cancelBooking(bookingId: string, kind: BookingKind, userId: string) {
     if (kind === "court") {
+      const before = await this.courtBookingRepo.findOne({
+        where: { id: bookingId },
+      });
       await this.courtBookingHandler.cancel(bookingId, userId);
       void this.bookingMailService.sendBookingCancellation(bookingId);
+      if (before?.locationId) {
+        const d =
+          before.bookingDate instanceof Date
+            ? before.bookingDate.toISOString().slice(0, 10)
+            : String(before.bookingDate).slice(0, 10);
+        this.courtHoldGateway.broadcastCourtBookingMutated(before.locationId, {
+          bookingDate: d,
+          courtId: before.courtId,
+          sport: before.sport,
+          courtType: before.courtType,
+        });
+      }
     } else {
       await this.coachSessionHandler.cancel(bookingId, userId);
     }
@@ -348,6 +501,39 @@ export class BookingsService {
   }
 
   async adminUpdateCourtBooking(id: string, dto: AdminUpdateCourtBookingDto) {
+    const hasSchedule =
+      dto.bookingDate != null || dto.startTime != null || dto.endTime != null;
+    if (hasSchedule) {
+      if (!dto.bookingDate || !dto.startTime || !dto.endTime) {
+        throw new BadRequestException(
+          "To reschedule, provide bookingDate, startTime, and endTime together",
+        );
+      }
+      const before = await this.courtBookingRepo.findOne({ where: { id } });
+      if (!before) throw new NotFoundException("Booking not found");
+      await this.assertAtMostOneCourtBookingPerUserPerDay(
+        before.userId,
+        dto.bookingDate,
+        id,
+      );
+      await this.courtBookingHandler.adminRescheduleCourtBooking(id, {
+        bookingDate: dto.bookingDate,
+        startTime: dto.startTime,
+        endTime: dto.endTime,
+      });
+      const court = await this.courtRepo.findOne({
+        where: { id: before.courtId },
+      });
+      if (court?.locationId) {
+        this.courtHoldGateway.broadcastCourtBookingMutated(court.locationId, {
+          bookingDate: dto.bookingDate.slice(0, 10),
+          courtId: before.courtId,
+          sport: court.sports?.[0] ?? null,
+          courtType: court.courtTypes?.[0] ?? null,
+        });
+      }
+    }
+
     const row = await this.courtBookingRepo.findOne({
       where: { id },
       relations: { court: true, user: true, location: true },
@@ -362,6 +548,71 @@ export class BookingsService {
     }
     await this.courtBookingRepo.save(row);
     return row;
+  }
+
+  async adminCancelCourtBooking(id: string) {
+    const before = await this.courtBookingRepo.findOne({ where: { id } });
+    const updated = await this.courtBookingHandler.adminCancelCourtBooking(id);
+    void this.bookingMailService.sendBookingCancellation(id);
+    if (before?.locationId) {
+      const d =
+        before.bookingDate instanceof Date
+          ? before.bookingDate.toISOString().slice(0, 10)
+          : String(before.bookingDate).slice(0, 10);
+      const court = await this.courtRepo.findOne({
+        where: { id: before.courtId },
+      });
+      this.courtHoldGateway.broadcastCourtBookingMutated(before.locationId, {
+        bookingDate: d,
+        courtId: before.courtId,
+        sport: court?.sports?.[0] ?? before.sport ?? null,
+        courtType: court?.courtTypes?.[0] ?? before.courtType ?? null,
+      });
+    }
+    return updated;
+  }
+
+  /**
+   * Admin: cancel every non-terminal court row sharing the same calendar series (recurring / multi-date).
+   * Does not send per-booking emails (bulk administrative action).
+   */
+  async adminCancelCourtBookingSeries(seriesId: string) {
+    const rows = await this.courtBookingRepo.find({
+      where: {
+        adminCalendarSeriesId: seriesId,
+        bookingStatus: In([
+          CourtBookingStatus.PENDING,
+          CourtBookingStatus.CONFIRMED,
+        ]),
+      },
+      relations: { court: true },
+    });
+    if (!rows.length) {
+      throw new NotFoundException("No active bookings found for this series");
+    }
+    const locationIds = new Set<string>();
+    for (const row of rows) {
+      row.bookingStatus = CourtBookingStatus.CANCELLED;
+      if (row.locationId) locationIds.add(row.locationId);
+    }
+    await this.courtBookingRepo.save(rows);
+    for (const locationId of locationIds) {
+      const sample = rows.find((r) => r.locationId === locationId);
+      const d =
+        sample?.bookingDate instanceof Date
+          ? sample.bookingDate.toISOString().slice(0, 10)
+          : String(sample?.bookingDate).slice(0, 10);
+      const court = sample?.courtId
+        ? await this.courtRepo.findOne({ where: { id: sample.courtId } })
+        : null;
+      this.courtHoldGateway.broadcastCourtBookingMutated(locationId, {
+        bookingDate: d,
+        courtId: sample?.courtId,
+        sport: court?.sports?.[0] ?? sample?.sport ?? null,
+        courtType: court?.courtTypes?.[0] ?? sample?.courtType ?? null,
+      });
+    }
+    return { cancelledCount: rows.length };
   }
 
   async findBooking(bookingId: string, kind: BookingKind) {

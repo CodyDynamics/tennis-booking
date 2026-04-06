@@ -48,6 +48,13 @@ export interface CourtBookingCreateParams extends CreateBookingParams {
   locationBookingWindowId?: string;
   /** Activity booked (must be in court.sports when set) */
   sport?: string;
+  /**
+   * Admin calendar POST only: allow same-day slots whose start is already past in venue TZ
+   * (backfill / walk-in). Never set from public `POST /bookings/court`.
+   */
+  bypassVenuePastStartCheck?: boolean;
+  /** Admin calendar: optional series id stored on the row */
+  adminCalendarSeriesId?: string | null;
 }
 
 function parseHourlyMemberRate(court: Court, location: Location): number {
@@ -222,7 +229,7 @@ export class CourtBookingHandler implements IBookingHandler {
     if (dateStr < todayYmd) {
       throw new BadRequestException("Cannot book a past date at this venue");
     }
-    if (dateStr === todayYmd) {
+    if (dateStr === todayYmd && !p.bypassVenuePastStartCheck) {
       const nowMin = wallClockMinutesNowInTimeZone(location.timezone);
       if (startMin < nowMin) {
         throw new BadRequestException(
@@ -301,8 +308,9 @@ export class CourtBookingHandler implements IBookingHandler {
     const booking = this.courtBookingRepo.create({
       locationId: location.id,
       sport: sportSnapshot,
-      courtType: court.type,
+      courtType: court.courtTypes?.[0] ?? "outdoor",
       locationBookingWindowId: p.locationBookingWindowId ?? null,
+      adminCalendarSeriesId: p.adminCalendarSeriesId?.trim() || null,
       pricingTier,
       unitPricePerHourSnapshot: unitSnapshot,
       discountAmount:
@@ -551,6 +559,148 @@ export class CourtBookingHandler implements IBookingHandler {
     }
     booking.bookingStatus = CourtBookingStatus.CANCELLED;
     await this.courtBookingRepo.save(booking);
+  }
+
+  /** Admin calendar: cancel any court booking (no owner check). */
+  async adminCancelCourtBooking(bookingId: string): Promise<CourtBooking> {
+    const booking = await this.courtBookingRepo.findOne({
+      where: { id: bookingId },
+      relations: { court: true },
+    });
+    if (!booking) throw new NotFoundException("Booking not found");
+    if (
+      booking.bookingStatus === CourtBookingStatus.CANCELLED ||
+      booking.bookingStatus === CourtBookingStatus.COMPLETED
+    ) {
+      throw new BadRequestException("Booking cannot be cancelled");
+    }
+    booking.bookingStatus = CourtBookingStatus.CANCELLED;
+    return this.courtBookingRepo.save(booking);
+  }
+
+  /**
+   * Admin calendar: same court, new wall-clock slot. Recomputes price and UTC range.
+   */
+  async adminRescheduleCourtBooking(
+    bookingId: string,
+    dto: { bookingDate: string; startTime: string; endTime: string },
+  ): Promise<CourtBooking> {
+    const booking = await this.courtBookingRepo.findOne({
+      where: { id: bookingId },
+      relations: { court: { location: true } },
+    });
+    if (!booking) throw new NotFoundException("Booking not found");
+    if (booking.coachId) {
+      throw new BadRequestException(
+        "Bookings with a coach cannot be rescheduled from the admin calendar",
+      );
+    }
+    if (
+      booking.bookingStatus === CourtBookingStatus.CANCELLED ||
+      booking.bookingStatus === CourtBookingStatus.COMPLETED
+    ) {
+      throw new BadRequestException("This booking cannot be rescheduled");
+    }
+
+    const court = booking.court;
+    const location = court?.location;
+    if (!court || !location) {
+      throw new BadRequestException("Court has no location");
+    }
+    if (court.status !== "active") {
+      throw new BadRequestException("Court is not available for booking");
+    }
+
+    const startMin = this.parseTimeToMinutes(dto.startTime);
+    const endMin = this.parseTimeToMinutes(dto.endTime);
+    if (endMin <= startMin) {
+      throw new BadRequestException("endTime must be after startTime");
+    }
+    const durationMinutes = endMin - startMin;
+
+    const dateStr = dto.bookingDate.slice(0, 10);
+    const todayYmd = ymdTodayInIanaTimeZone(location.timezone);
+    if (dateStr < todayYmd) {
+      throw new BadRequestException("Cannot move booking to a past date at this venue");
+    }
+    const normStart = this.formatTime(startMin);
+    const normEnd = this.formatTime(endMin);
+
+    const available = await this.isCourtAvailable(
+      booking.courtId,
+      dateStr,
+      normStart,
+      normEnd,
+      booking.id,
+    );
+    if (!available) {
+      throw new BadRequestException(
+        "Court is not available for the selected time slot",
+      );
+    }
+
+    let membership: UserLocationMembership | null = null;
+    if (location.visibility === LocationVisibility.PRIVATE) {
+      membership =
+        await this.locationsService.requirePrivateVenueMembershipForBooking(
+          booking.userId,
+          location.id,
+        );
+    }
+
+    const pricingTier =
+      location.visibility === LocationVisibility.PRIVATE
+        ? CourtPricingTier.MEMBER
+        : CourtPricingTier.PUBLIC;
+
+    const publicHourly = parseFloat(court.pricePerHourPublic);
+    let courtHourly = publicHourly;
+    let discountAmountNum: number | null = null;
+    const unitSnapshot = publicHourly.toFixed(2);
+
+    if (pricingTier === CourtPricingTier.MEMBER) {
+      courtHourly = parseHourlyMemberRate(court, location);
+      const hours = durationMinutes / 60;
+      discountAmountNum = Math.max(
+        0,
+        publicHourly * hours - courtHourly * hours,
+      );
+    }
+
+    const totalPrice = courtHourly * (durationMinutes / 60);
+
+    const { start: bookingStartAt, end: bookingEndAt } =
+      await this.wallRangeToUtc(
+        dateStr,
+        normStart,
+        normEnd,
+        location.timezone,
+      );
+
+    booking.locationId = location.id;
+    booking.bookingDate = new Date(dateStr);
+    booking.startTime = normStart;
+    booking.endTime = normEnd;
+    booking.durationMinutes = durationMinutes;
+    booking.bookingStartAt = bookingStartAt;
+    booking.bookingEndAt = bookingEndAt;
+    booking.pricingTier = pricingTier;
+    booking.unitPricePerHourSnapshot = unitSnapshot;
+    booking.discountAmount =
+      discountAmountNum != null ? discountAmountNum.toFixed(2) : null;
+    booking.userLocationMembershipId = membership?.id ?? null;
+    booking.totalPrice = String(totalPrice.toFixed(2));
+
+    try {
+      return await this.courtBookingRepo.save(booking);
+    } catch (e) {
+      if (this.isOverlapConstraintViolation(e)) {
+        throw new ConflictException(
+          "That slot was just taken. Please pick another time.",
+        );
+      }
+      throw e;
+    }
   }
 
   async findOne(bookingId: string): Promise<CourtBooking | null> {
