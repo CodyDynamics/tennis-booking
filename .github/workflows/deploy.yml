@@ -1,0 +1,38 @@
+name: Deploy to EC2 (Nest API + PM2)
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            echo "🚀 Starting deployment..."
+
+            cd /home/ec2-user/tennis-booking
+
+            echo "📥 Pulling latest code..."
+            git pull origin main
+
+            echo "📦 Installing dependencies..."
+            pnpm install --frozen-lockfile
+
+            echo "🏗 Building Nest API..."
+            pnpm run build
+
+            echo "🔄 Reloading PM2..."
+            pm2 startOrReload ecosystem.config.js
+
+            echo "💾 Saving PM2 state..."
+            pm2 save
+
+            echo "✅ Deployment complete!"
