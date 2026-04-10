@@ -1,103 +1,25 @@
-# Backend stack: Postgres, Redis, API
-# From backend/: docker compose up -d --build
+# API only (Docker). Postgres and Redis are not defined here — set `DB_*` / `REDIS_*` in `.env`
+# (e.g. DB_HOST=host.docker.internal on Docker Desktop to use Postgres on your machine).
 #
-# Đăng ký: mặc định SEND_REGISTRATION_EMAIL=false (không SMTP trong compose) → user được tạo ngay, không OTP email.
-# SEND_REGISTRATION_EMAIL=true: cần mail hợp lệ — gợi ý MAIL_PROVIDER=smtp + EMAIL_* (app password Gmail),
-# hoặc RESEND_API_KEY, hoặc MAIL_PROVIDER=cloud + GOOGLE_REFRESH_TOKEN (nếu invalid_grant → tạo lại token ở OAuth Playground).
+# Run from the directory that contains this file (repo root):
+#   docker compose up -d --build
 #
-# Truy cập từ máy khác / Internet:
-# - Publish port: mặc định 0.0.0.0:${API_HOST_PORT:-3000} → mở firewall OS + router (nếu cần) + security group (cloud).
-# - CORS: đặt FRONTEND_URL (URL frontend thật) và/hoặc CORS_ORIGINS (danh sách URL cách nhau bởi dấu phẩy).
+# Env: put `.env` next to this file. The `api` service uses `env_file: .env`. See comments in older
+# revisions or docs for `${VAR:-default}` vs env_file behavior.
 
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: booking-tennis-postgres
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-booking_tennis}
-    ports:
-      - "${POSTGRES_PORT:-5433}:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - booking-tennis-backend
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    container_name: booking-tennis-redis
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - booking-tennis-backend
-    command: redis-server --appendonly yes
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   api:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
     container_name: booking-tennis-api
+    env_file:
+      - .env
     environment:
-      NODE_ENV: ${NODE_ENV:-development}
       HOST: ${HOST:-0.0.0.0}
       PORT: "3000"
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: ${POSTGRES_USER:-postgres}
-      DB_PASS: ${POSTGRES_PASSWORD:-postgres}
-      DB_NAME: ${POSTGRES_DB:-booking_tennis}
-      DB_LOGGING: "false"
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-your-super-secret-refresh-key-change-in-production}
-      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-http://localhost:3000/auth/google/callback}
-      # Chỉ khi MAIL_PROVIDER=cloud (Gmail API gửi mail). invalid_grant = refresh token hết hạn, cần tạo lại.
-      GOOGLE_REFRESH_TOKEN: ${GOOGLE_REFRESH_TOKEN:-}
-      GOOGLE_SENDER_EMAIL: ${GOOGLE_SENDER_EMAIL:-}
-      GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-https://developers.google.com/oauthplayground}
-      EMAIL_HOST: ${EMAIL_HOST:-}
-      EMAIL_PORT: ${EMAIL_PORT:-587}
-      EMAIL_SECURE: ${EMAIL_SECURE:-false}
-      EMAIL_USER: ${EMAIL_USER:-}
-      EMAIL_PASSWORD: ${EMAIL_PASSWORD:-}
-      EMAIL_FROM: ${EMAIL_FROM:-noreply@booking-tennis.com}
-      MAIL_PROVIDER: ${MAIL_PROVIDER:-}
-      RESEND_API_KEY: ${RESEND_API_KEY:-}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3001}
-      CORS_ORIGINS: ${CORS_ORIGINS:-}
-      LOGIN_OTP_ENABLED: ${LOGIN_OTP_ENABLED:-false}
-      # false (default): đăng ký xong ngay. true: cần SMTP, Resend, hoặc cloud + GOOGLE_REFRESH_TOKEN hợp lệ.
-      SEND_REGISTRATION_EMAIL: ${SEND_REGISTRATION_EMAIL:-false}
-      REDIS_ENABLED: ${REDIS_ENABLED:-false}
-      DB_SYNC: ${DB_SYNC:-true}
     ports:
-      # Short form publishes on all interfaces; dùng http://127.0.0.1:3000 nếu localhost (IPv6) lỗi trên Mac
       - "${API_HOST_PORT:-3000}:3000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - booking-tennis-backend
     volumes:
       - ./apps/api/keys:/app/apps/api/keys
     restart: unless-stopped
@@ -113,11 +35,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-volumes:
-  postgres_data:
-  redis_data:
-
-networks:
-  booking-tennis-backend:
-    driver: bridge
