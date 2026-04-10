@@ -19,10 +19,28 @@ class AppSocketIoAdapter extends IoAdapter {
 
   createIOServer(port: number, options?: Record<string, unknown>) {
     const httpServer = this.nestApp.getHttpServer() as HttpServer | undefined;
+    /** Default Engine.IO ping is 25s; many reverse proxies close “idle” WS in ~15–30s. Shorter pings keep the tunnel alive in production. */
+    const pingInterval = Number.parseInt(
+      process.env.SOCKET_IO_PING_INTERVAL_MS ?? "10000",
+      10,
+    );
+    const pingTimeout = Number.parseInt(
+      process.env.SOCKET_IO_PING_TIMEOUT_MS ?? "25000",
+      10,
+    );
+    const serverOptions = {
+      ...options,
+      ...(Number.isFinite(pingInterval) && pingInterval > 0
+        ? { pingInterval }
+        : {}),
+      ...(Number.isFinite(pingTimeout) && pingTimeout > 0
+        ? { pingTimeout }
+        : {}),
+    };
     if (httpServer) {
-      return new SocketIoServer(httpServer, options);
+      return new SocketIoServer(httpServer, serverOptions);
     }
-    return super.createIOServer(port, options);
+    return super.createIOServer(port, serverOptions);
   }
 }
 
