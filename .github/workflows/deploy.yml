@@ -16,12 +16,27 @@ jobs:
           username: ec2-user
           key: ${{ secrets.EC2_KEY }}
           script: |
+            set -euo pipefail
+
+            APP_DIR=/home/ec2-user/tennis-booking-backend
+            NEW_DIR=${APP_DIR}-new
+            OLD_DIR=${APP_DIR}-old
+
             echo "🚀 Starting deployment..."
 
-            cd /home/ec2-user/tennis-booking-backend
+            echo "📋 Copying live app to staging (keeps .env and .git remote)..."
+            rm -rf "$NEW_DIR"
+            mkdir -p "$NEW_DIR"
+            rsync -a \
+              --exclude node_modules \
+              --exclude dist \
+              "$APP_DIR/" "$NEW_DIR/"
 
-            echo "📥 Pulling latest code..."
-            git pull origin main
+            cd "$NEW_DIR"
+
+            echo "📥 Updating to origin/main..."
+            git fetch origin
+            git reset --hard origin/main
 
             echo "📦 Installing dependencies..."
             pnpm install --frozen-lockfile
@@ -29,10 +44,23 @@ jobs:
             echo "🏗 Building Nest API..."
             pnpm run build
 
+            echo "🧪 Validating build..."
+            test -f dist/apps/api/src/main.js
+
+            echo "🔁 Swapping deployment..."
+            rm -rf "$OLD_DIR"
+            mv "$APP_DIR" "$OLD_DIR"
+            mv "$NEW_DIR" "$APP_DIR"
+
+            cd "$APP_DIR"
+
             echo "🔄 Reloading PM2..."
             pm2 startOrReload ecosystem.config.js
 
             echo "💾 Saving PM2 state..."
             pm2 save
+
+            echo "🧹 Removing previous release..."
+            rm -rf "$OLD_DIR"
 
             echo "✅ Deployment complete!"
