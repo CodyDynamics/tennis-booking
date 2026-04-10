@@ -97,6 +97,7 @@ import { NotificationsModule } from "./notifications/notifications.module";
       imports: [ConfigModule],
       global: true,
       useFactory: (config: ConfigService) => {
+        console.log(a);
         const jwtSecret =
           process.env.JWT_SECRET ||
           config.get<string>("jwt.secret") ||
