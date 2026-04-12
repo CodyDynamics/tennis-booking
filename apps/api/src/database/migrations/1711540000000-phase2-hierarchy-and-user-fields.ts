@@ -138,12 +138,39 @@ export class Phase2HierarchyAndUserFields1711540000000
     `);
 
     await queryRunner.query(`
-      UPDATE "courts" c
-      SET "sportId" = s.id
-      FROM "sports" s
-      WHERE c."sportId" IS NULL
-        AND c."sport" IS NOT NULL
-        AND s."code" = c."sport"
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'courts' AND column_name = 'sport'
+        ) THEN
+          UPDATE "courts" c
+          SET "sportId" = s.id
+          FROM "sports" s
+          WHERE c."sportId" IS NULL
+            AND c."sport" IS NOT NULL
+            AND TRIM(c."sport") <> ''
+            AND s."code" = c."sport";
+        END IF;
+
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'courts' AND column_name = 'sports'
+        ) THEN
+          UPDATE "courts" c
+          SET "sportId" = x.sid
+          FROM (
+            SELECT DISTINCT ON (c2.id) c2.id AS cid, s.id AS sid
+            FROM "courts" c2
+            INNER JOIN "sports" s ON s."code" = ANY (c2."sports")
+            WHERE c2."sportId" IS NULL
+              AND c2."sports" IS NOT NULL
+              AND cardinality(c2."sports") > 0
+            ORDER BY c2.id, s.id
+          ) x
+          WHERE c.id = x.cid;
+        END IF;
+      END$$;
     `);
     await queryRunner.query(`
       UPDATE "users"
