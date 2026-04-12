@@ -27,6 +27,17 @@ import { Coach } from "./coaches/entities/coach.entity";
 import { CourtBooking } from "./bookings/entities/court-booking.entity";
 import { CoachSession } from "./bookings/entities/coach-session.entity";
 import { BookingCommand } from "./bookings/entities/booking-command.entity";
+import { ParentGuardianLink } from "./platform/entities/parent-guardian-link.entity";
+import { CoachRosterEntry } from "./platform/entities/coach-roster-entry.entity";
+import { PlayerMetricSnapshot } from "./platform/entities/player-metric-snapshot.entity";
+import { TrainingPlan } from "./platform/entities/training-plan.entity";
+import { TrainingPlanItem } from "./platform/entities/training-plan-item.entity";
+import { TrainingPlanCompletion } from "./platform/entities/training-plan-completion.entity";
+import { SessionFeedbackNote } from "./platform/entities/session-feedback-note.entity";
+import { TrainingVideo } from "./platform/entities/training-video.entity";
+import { ParentPaymentRequest } from "./platform/entities/parent-payment-request.entity";
+import { Achievement } from "./platform/entities/achievement.entity";
+import { UserAchievement } from "./platform/entities/user-achievement.entity";
 
 import { AreasModule } from "./areas/areas.module";
 import { CourtsModule } from "./courts/courts.module";
@@ -37,6 +48,7 @@ import { SportsModule } from "./sports/sports.module";
 import { RedisModule } from "./redis/redis.module";
 import { AdminModule } from "./admin/admin.module";
 import { NotificationsModule } from "./notifications/notifications.module";
+import { PlatformModule } from "./platform/platform.module";
 
 @Module({
   imports: [
@@ -65,7 +77,10 @@ import { NotificationsModule } from "./notifications/notifications.module";
           username: config.get<string>("DB_USER", "postgres"),
           password: config.get<string>("DB_PASS", "postgres"),
           database: config.get<string>("DB_NAME", "booking_tennis"),
-          ssl: { rejectUnauthorized: false },
+          ssl:
+            config.get<string>("NODE_ENV") === "production"
+              ? { rejectUnauthorized: false }
+              : false,
           entities: [
             User,
             Role,
@@ -82,6 +97,17 @@ import { NotificationsModule } from "./notifications/notifications.module";
             CourtBooking,
             CoachSession,
             BookingCommand,
+            ParentGuardianLink,
+            CoachRosterEntry,
+            PlayerMetricSnapshot,
+            TrainingPlan,
+            TrainingPlanItem,
+            TrainingPlanCompletion,
+            SessionFeedbackNote,
+            TrainingVideo,
+            ParentPaymentRequest,
+            Achievement,
+            UserAchievement,
           ],
           // On Render/production, set DB_SYNC=true so TypeORM creates tables (no migrations yet). Can set DB_SYNC=false after first deploy.
           synchronize:
@@ -130,6 +156,7 @@ import { NotificationsModule } from "./notifications/notifications.module";
     RolesModule,
     SportsModule,
     AdminModule,
+    PlatformModule,
   ],
   controllers: [],
   providers: [],

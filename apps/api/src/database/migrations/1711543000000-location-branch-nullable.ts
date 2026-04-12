@@ -6,19 +6,33 @@ export class LocationBranchNullable1711543000000 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      ALTER TABLE "locations" ALTER COLUMN "branchId" DROP NOT NULL
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'locations' AND column_name = 'branchId'
+        ) THEN
+          ALTER TABLE "locations" ALTER COLUMN "branchId" DROP NOT NULL;
+        END IF;
+      END$$;
     `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      UPDATE "locations" SET "branchId" = (
-        SELECT b.id FROM "branches" b ORDER BY b."createdAt" ASC NULLS LAST LIMIT 1
-      )
-      WHERE "branchId" IS NULL
-    `);
-    await queryRunner.query(`
-      ALTER TABLE "locations" ALTER COLUMN "branchId" SET NOT NULL
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'locations' AND column_name = 'branchId'
+        ) THEN
+          UPDATE "locations" SET "branchId" = (
+            SELECT b.id FROM "branches" b ORDER BY b."createdAt" ASC NULLS LAST LIMIT 1
+          )
+          WHERE "branchId" IS NULL;
+          ALTER TABLE "locations" ALTER COLUMN "branchId" SET NOT NULL;
+        END IF;
+      END$$;
     `);
   }
 }

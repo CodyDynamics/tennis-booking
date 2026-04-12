@@ -75,6 +75,13 @@ export class User {
   })
   accountType: UserAccountType;
 
+  /** Mobile onboarding persona (coach | player | parent); independent of RBAC role. */
+  @Column({ type: "varchar", length: 16, nullable: true })
+  appPersona: string | null;
+
+  @Column({ type: "timestamptz", nullable: true })
+  onboardingCompletedAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
