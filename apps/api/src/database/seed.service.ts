@@ -356,7 +356,7 @@ export class SeedService implements OnModuleInit {
     /* eslint-disable prettier/prettier */
     const coachUsers = [
       {
-        email: "coach1@CodyActive.com",
+        email: "coach1@CodyReserve.com",
         fullName: "Alex Rivera",
         bio: "Certified tennis and pickleball coach. 10+ years experience.",
         hourlyRate: "45.00",
@@ -364,7 +364,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach2@CodyActive.com",
+        email: "coach2@CodyReserve.com",
         fullName: "Jordan Lee",
         bio: "Former collegiate player. Specializing in technique and match strategy.",
         hourlyRate: "50.00",
@@ -372,7 +372,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach3@CodyActive.com",
+        email: "coach3@CodyReserve.com",
         fullName: "Morgan Taylor",
         bio: "USPTA certified. Focus on doubles and singles strategy.",
         hourlyRate: "48.00",
@@ -380,7 +380,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach4@CodyActive.com",
+        email: "coach4@CodyReserve.com",
         fullName: "Casey Kim",
         bio: "Pickleball specialist. Tournament experience and beginner programs.",
         hourlyRate: "42.00",
@@ -388,7 +388,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach5@CodyActive.com",
+        email: "coach5@CodyReserve.com",
         fullName: "Riley Chen",
         bio: "Tennis and pickleball. Junior development and adult clinics.",
         hourlyRate: "46.00",
@@ -396,7 +396,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach6@CodyActive.com",
+        email: "coach6@CodyReserve.com",
         fullName: "Sam Davis",
         bio: "Former ATP circuit. Serve and volley specialist.",
         hourlyRate: "55.00",
@@ -404,7 +404,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach7@CodyActive.com",
+        email: "coach7@CodyReserve.com",
         fullName: "Jamie Wright",
         bio: "Fitness and tennis combined. Movement and conditioning.",
         hourlyRate: "44.00",
@@ -412,7 +412,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach8@CodyActive.com",
+        email: "coach8@CodyReserve.com",
         fullName: "Drew Martinez",
         bio: "High-performance tennis. Mental game and match play.",
         hourlyRate: "52.00",
@@ -420,7 +420,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach9@CodyActive.com",
+        email: "coach9@CodyReserve.com",
         fullName: "Quinn Anderson",
         bio: "Pickleball and paddle sports. Group lessons and leagues.",
         hourlyRate: "40.00",
@@ -428,7 +428,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach10@CodyActive.com",
+        email: "coach10@CodyReserve.com",
         fullName: "Skyler Brown",
         bio: "Tennis fundamentals and footwork. All levels welcome.",
         hourlyRate: "43.00",
@@ -436,7 +436,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach11@CodyActive.com",
+        email: "coach11@CodyReserve.com",
         fullName: "Jordan Smith",
         bio: "Doubles strategy and net play. Tournament preparation.",
         hourlyRate: "49.00",
@@ -444,7 +444,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1519345182560-3f2917c472ef?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach12@CodyActive.com",
+        email: "coach12@CodyReserve.com",
         fullName: "Taylor Green",
         bio: "Junior tennis and pickleball. Fun, progressive curriculum.",
         hourlyRate: "41.00",
@@ -452,7 +452,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach13@CodyActive.com",
+        email: "coach13@CodyReserve.com",
         fullName: "Reese White",
         bio: "Recovery and technique. Injury prevention for players.",
         hourlyRate: "47.00",
@@ -460,7 +460,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach14@CodyActive.com",
+        email: "coach14@CodyReserve.com",
         fullName: "Cameron Hall",
         bio: "Serve technique and power. Video analysis available.",
         hourlyRate: "51.00",
@@ -468,7 +468,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1502685104226-ee32379fefbe?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach15@CodyActive.com",
+        email: "coach15@CodyReserve.com",
         fullName: "Avery Clark",
         bio: "Mixed doubles and social play. Leagues and round robins.",
         hourlyRate: "39.00",
@@ -476,7 +476,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach16@CodyActive.com",
+        email: "coach16@CodyReserve.com",
         fullName: "Parker Lewis",
         bio: "Tennis and pickleball. High school and college prep.",
         hourlyRate: "53.00",
@@ -484,7 +484,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1507591064344-4c6ce005b128?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach17@CodyActive.com",
+        email: "coach17@CodyReserve.com",
         fullName: "Blake Young",
         bio: "Beginner to advanced. Patience and clear communication.",
         hourlyRate: "38.00",
@@ -492,7 +492,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach18@CodyActive.com",
+        email: "coach18@CodyReserve.com",
         fullName: "Morgan King",
         bio: "Competitive pickleball. Dinking and third-shot drops.",
         hourlyRate: "44.00",
@@ -500,7 +500,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1539571696357-5a69c3a0062f?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach19@CodyActive.com",
+        email: "coach19@CodyReserve.com",
         fullName: "Riley Scott",
         bio: "Tennis tactics and match analysis. Film review sessions.",
         hourlyRate: "54.00",
@@ -508,7 +508,7 @@ export class SeedService implements OnModuleInit {
           "https://images.unsplash.com/photo-1528892952291-009c663ce843?w=200&h=200&fit=crop&q=80",
       },
       {
-        email: "coach20@CodyActive.com",
+        email: "coach20@CodyReserve.com",
         fullName: "Casey Adams",
         bio: "All-around coach. Tennis, pickleball, and fitness.",
         hourlyRate: "46.00",
@@ -522,7 +522,7 @@ export class SeedService implements OnModuleInit {
     const freeCoachUsers = Array.from({ length: 20 }, (_, i) => {
       const n = 21 + i;
       return {
-        email: `coach${n}@CodyActive.com`,
+        email: `coach${n}@CodyReserve.com`,
         fullName: `Independent Pro ${n}`,
         bio: "Independent coach (seed). Listed on the public coach directory; not tied to a single court.",
         hourlyRate: `${40 + (i % 12)}.00`,
@@ -1003,12 +1003,12 @@ export class SeedService implements OnModuleInit {
       phone: string;
     }> = [
       {
-        email: "private-club-demo@CodyActive.com",
+        email: "private-club-demo@CodyReserve.com",
         fullName: "Private Club Demo Member",
         phone: "+15555550999",
       },
       {
-        email: "pickleball-member2@CodyActive.com",
+        email: "pickleball-member2@CodyReserve.com",
         fullName: "Springpark B Member Two",
         phone: "+15555550888",
       },
@@ -1092,11 +1092,11 @@ export class SeedService implements OnModuleInit {
 
     const legacyEmails = Array.from(
       { length: 20 },
-      (_, i) => `coach${i + 1}@CodyActive.com`,
+      (_, i) => `coach${i + 1}@CodyReserve.com`,
     );
     const freeEmails = Array.from(
       { length: 20 },
-      (_, i) => `coach${i + 21}@CodyActive.com`,
+      (_, i) => `coach${i + 21}@CodyReserve.com`,
     );
 
     for (let i = 0; i < legacyEmails.length; i++) {
@@ -1150,7 +1150,7 @@ export class SeedService implements OnModuleInit {
         });
         if (assigned >= target) break;
 
-        const email = `autofill-${court.id}-slot${nextSlot}@CodyActive.com`;
+        const email = `autofill-${court.id}-slot${nextSlot}@CodyReserve.com`;
         nextSlot += 1;
 
         let user = await this.userRepo.findOne({
