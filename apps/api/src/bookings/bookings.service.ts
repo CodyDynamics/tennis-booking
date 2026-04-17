@@ -28,6 +28,7 @@ import {
 import { Court } from "../courts/entities/court.entity";
 import { BookingMailService } from "../notifications/booking-mail.service";
 import { Area } from "../areas/entities/area.entity";
+import { LocationBookingWindow } from "../locations/entities/location-booking-window.entity";
 import { LocationVisibility } from "../locations/entities/location.enums";
 import { LocationsService } from "../locations/locations.service";
 import {
@@ -60,6 +61,8 @@ export class BookingsService {
     private readonly areaRepo: Repository<Area>,
     @InjectRepository(CourtBooking)
     private readonly courtBookingRepo: Repository<CourtBooking>,
+    @InjectRepository(LocationBookingWindow)
+    private readonly locationBookingWindowRepo: Repository<LocationBookingWindow>,
     private readonly courtHoldGateway: CourtHoldGateway,
     private readonly redisService: RedisService,
   ) {}
@@ -111,6 +114,27 @@ export class BookingsService {
         throw new ForbiddenException("This area requires a venue membership");
       }
     }
+  }
+
+  private parseAllowedDurations(raw: string): number[] {
+    try {
+      const v = JSON.parse(raw) as unknown;
+      if (!Array.isArray(v)) return [60];
+      return v
+        .map((x) => (typeof x === "number" ? x : parseInt(String(x), 10)))
+        .filter((n) => Number.isFinite(n) && n > 0);
+    } catch {
+      return [60];
+    }
+  }
+
+  private bookingWindowMatchesSport(
+    windowSport: string,
+    selectedSport: string,
+  ): boolean {
+    const ws = (windowSport ?? "").trim().toLowerCase();
+    if (!ws || ws === "*") return true;
+    return ws === selectedSport.trim().toLowerCase();
   }
 
   /**
@@ -408,6 +432,20 @@ export class BookingsService {
       qb.andWhere("c.areaId = :areaId", { areaId: dto.areaId });
     }
     const courts = await qb.orderBy("c.name", "ASC").getMany();
+    const windowRows = await this.locationBookingWindowRepo.find({
+      where: {
+        locationId: dto.locationId,
+        courtType: dto.courtType,
+        isActive: true,
+      },
+      order: { sortOrder: "ASC", windowStartTime: "ASC" },
+    });
+    const windows = windowRows.filter((w) =>
+      this.bookingWindowMatchesSport(w.sport, dto.sport),
+    );
+    const globalWindows = windows.filter((w) => !w.courtId);
+    const startM = this.timeToMinutes(dto.startTime);
+    const endM = this.timeToMinutes(dto.endTime);
 
     if (courts.length === 0) {
       throw new ConflictException(
@@ -421,6 +459,19 @@ export class BookingsService {
     // Find the first available court for this slot
     let assignedCourtId: string | null = null;
     for (const court of shuffled) {
+      const specific = windows.filter((w) => w.courtId === court.id);
+      const rules = specific.length > 0 ? specific : globalWindows;
+      const insideAllowedWindow = rules.some((w) => {
+        const allowedDurations = this.parseAllowedDurations(
+          w.allowedDurationMinutes,
+        );
+        if (!allowedDurations.includes(dto.durationMinutes)) return false;
+        const wStart = this.timeToMinutes(w.windowStartTime);
+        const wEnd = this.timeToMinutes(w.windowEndTime);
+        return startM >= wStart && endM <= wEnd;
+      });
+      if (!insideAllowedWindow) continue;
+
       const free = await this.courtBookingHandler.isCourtAvailable(
         court.id,
         dto.bookingDate,
@@ -753,5 +804,10 @@ export class BookingsService {
     const [sh, sm] = start.split(":").map(Number);
     const [eh, em] = end.split(":").map(Number);
     return eh * 60 + em - (sh * 60 + sm);
+  }
+
+  private timeToMinutes(t: string): number {
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
   }
 }
