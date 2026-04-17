@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
+  IsBoolean,
   IsDateString,
   IsIn,
   IsInt,
@@ -57,4 +58,12 @@ export class CreateCourtSlotBookingDto {
   @IsOptional()
   @IsUUID()
   coachId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Client indicates it currently holds this same slot in websocket soft-lock (so backend can ignore one self hold).",
+  })
+  @IsOptional()
+  @IsBoolean()
+  hasClientHold?: boolean;
 }

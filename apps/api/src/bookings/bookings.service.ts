@@ -129,6 +129,7 @@ export class BookingsService {
       endTime: string;
       durationMinutes: number;
       excludeBookingId?: string;
+      hasClientHold?: boolean;
     },
   ): Promise<void> {
     const availability =
@@ -162,7 +163,11 @@ export class BookingsService {
       payload.locationId,
     );
     const holdCount = holdCounts[holdKey] ?? 0;
-    if (slot.availableCount - holdCount <= 0) {
+    const holdByOthers = Math.max(
+      0,
+      holdCount - (payload.hasClientHold ? 1 : 0),
+    );
+    if (slot.availableCount - holdByOthers <= 0) {
       throw new ConflictException(
         "This slot is currently locked by another booking in progress. Please pick another time.",
       );
@@ -389,6 +394,7 @@ export class BookingsService {
       startTime: dto.startTime,
       endTime: dto.endTime,
       durationMinutes: dto.durationMinutes,
+      hasClientHold: (dto as { hasClientHold?: boolean }).hasClientHold,
     });
     const qb = this.courtRepo
       .createQueryBuilder("c")
@@ -478,6 +484,7 @@ export class BookingsService {
       endTime: dto.endTime,
       durationMinutes: dto.durationMinutes,
       excludeBookingId: bookingId,
+      hasClientHold: (dto as { hasClientHold?: boolean }).hasClientHold,
     });
     const duration =
       dto.durationMinutes ??
@@ -607,11 +614,13 @@ export class BookingsService {
       }
       const before = await this.courtBookingRepo.findOne({ where: { id } });
       if (!before) throw new NotFoundException("Booking not found");
-      await this.assertAtMostOneCourtBookingPerUserPerDay(
-        before.userId,
-        dto.bookingDate,
-        id,
-      );
+      if (userRole !== "super_admin") {
+        await this.assertAtMostOneCourtBookingPerUserPerDay(
+          before.userId,
+          dto.bookingDate,
+          id,
+        );
+      }
       await this.courtBookingHandler.adminRescheduleCourtBooking(id, {
         bookingDate: dto.bookingDate,
         startTime: dto.startTime,
