@@ -38,6 +38,7 @@ import {
 import { AdminListCourtBookingsQueryDto } from "./dto/admin-list-court-bookings.query.dto";
 import { AdminUpdateCourtBookingDto } from "./dto/admin-update-court-booking.dto";
 import { CourtHoldGateway } from "./court-hold.gateway";
+import { RedisService } from "../redis/redis.service";
 
 /**
  * Booking Service (Parent / Facade).
@@ -60,6 +61,7 @@ export class BookingsService {
     @InjectRepository(CourtBooking)
     private readonly courtBookingRepo: Repository<CourtBooking>,
     private readonly courtHoldGateway: CourtHoldGateway,
+    private readonly redisService: RedisService,
   ) {}
 
   /**
@@ -108,6 +110,62 @@ export class BookingsService {
       if (!ok) {
         throw new ForbiddenException("This area requires a venue membership");
       }
+    }
+  }
+
+  /**
+   * Backend hard guard for slot flow:
+   * reject HTTP booking when real-time slot holds already consume all free courts.
+   */
+  private async assertSlotCanBeBooked(
+    userId: string,
+    payload: {
+      locationId: string;
+      areaId?: string;
+      sport: string;
+      courtType: string;
+      bookingDate: string;
+      startTime: string;
+      endTime: string;
+      durationMinutes: number;
+      excludeBookingId?: string;
+    },
+  ): Promise<void> {
+    const availability =
+      await this.courtWizardAvailability.computeAvailableSlots({
+        userId,
+        locationId: payload.locationId,
+        areaId: payload.areaId,
+        sport: payload.sport,
+        courtType: payload.courtType,
+        bookingDate: payload.bookingDate,
+        durationMinutes: payload.durationMinutes,
+        excludeBookingId: payload.excludeBookingId,
+      });
+
+    const slot = availability.slots.find(
+      (s) =>
+        s.startTime === payload.startTime &&
+        s.endTime === payload.endTime &&
+        s.durationMinutes === payload.durationMinutes,
+    );
+    if (!slot || slot.availableCount <= 0) {
+      throw new ConflictException(
+        "All courts are taken for this slot. Please pick another time.",
+      );
+    }
+
+    const holdKey =
+      `${payload.sport.toLowerCase()}|${payload.courtType.toLowerCase()}` +
+      `|${payload.bookingDate.slice(0, 10)}|${payload.startTime}|${payload.endTime}`;
+    const holdCounts = await this.redisService.getSlotHoldCounts(
+      payload.locationId,
+    );
+    const holdCount = holdCounts[holdKey] ?? 0;
+    if (slot.availableCount - holdCount <= 0) {
+      throw new ConflictException(
+        "This slot is currently locked by another booking in progress. Please pick another time.",
+      );
     }
   }
 
@@ -166,7 +224,10 @@ export class BookingsService {
       adminCalendarSeriesId: dto.adminCalendarSeriesId ?? null,
     });
     if (dto.sendConfirmationEmail === true) {
-      void this.bookingMailService.sendBookingConfirmation(result.id, "created");
+      void this.bookingMailService.sendBookingConfirmation(
+        result.id,
+        "created",
+      );
     }
     const court = await this.courtRepo.findOne({ where: { id: dto.courtId } });
     if (court?.locationId) {
@@ -309,6 +370,16 @@ export class BookingsService {
       userId,
       dto.bookingDate,
     );
+    await this.assertSlotCanBeBooked(userId, {
+      locationId: dto.locationId,
+      areaId: dto.areaId,
+      sport: dto.sport,
+      courtType: dto.courtType,
+      bookingDate: dto.bookingDate,
+      startTime: dto.startTime,
+      endTime: dto.endTime,
+      durationMinutes: dto.durationMinutes,
+    });
     const qb = this.courtRepo
       .createQueryBuilder("c")
       .where("c.locationId = :locationId", { locationId: dto.locationId })
@@ -387,6 +458,17 @@ export class BookingsService {
       dto.bookingDate,
       bookingId,
     );
+    await this.assertSlotCanBeBooked(userId, {
+      locationId: dto.locationId,
+      areaId: dto.areaId,
+      sport: dto.sport,
+      courtType: dto.courtType,
+      bookingDate: dto.bookingDate,
+      startTime: dto.startTime,
+      endTime: dto.endTime,
+      durationMinutes: dto.durationMinutes,
+      excludeBookingId: bookingId,
+    });
     const duration =
       dto.durationMinutes ??
       this.getDurationMinutes(dto.startTime, dto.endTime);
