@@ -57,4 +57,12 @@ export class AdminCreateCourtBookingBatchDto {
   @IsOptional()
   @IsBoolean()
   sendConfirmationEmail?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      "super_admin only: when true, overlapping dates are also created instead of being rejected.",
+  })
+  @IsOptional()
+  @IsBoolean()
+  allowOverlap?: boolean;
 }

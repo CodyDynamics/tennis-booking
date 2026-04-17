@@ -55,6 +55,8 @@ export interface CourtBookingCreateParams extends CreateBookingParams {
   bypassVenuePastStartCheck?: boolean;
   /** Admin calendar: optional series id stored on the row */
   adminCalendarSeriesId?: string | null;
+  /** Admin-only overbook switch: skip overlap availability check for this write. */
+  allowOverlap?: boolean;
 }
 
 function parseHourlyMemberRate(court: Court, location: Location): number {
@@ -238,16 +240,18 @@ export class CourtBookingHandler implements IBookingHandler {
       }
     }
 
-    const available = await this.isCourtAvailable(
-      p.courtId,
-      p.bookingDate,
-      p.startTime,
-      p.endTime,
-    );
-    if (!available) {
-      throw new BadRequestException(
-        "Court is not available for the selected time slot",
+    if (!p.allowOverlap) {
+      const available = await this.isCourtAvailable(
+        p.courtId,
+        p.bookingDate,
+        p.startTime,
+        p.endTime,
       );
+      if (!available) {
+        throw new BadRequestException(
+          "Court is not available for the selected time slot",
+        );
+      }
     }
 
     const sportSnapshot =
@@ -583,7 +587,12 @@ export class CourtBookingHandler implements IBookingHandler {
    */
   async adminRescheduleCourtBooking(
     bookingId: string,
-    dto: { bookingDate: string; startTime: string; endTime: string },
+    dto: {
+      bookingDate: string;
+      startTime: string;
+      endTime: string;
+      allowOverlap?: boolean;
+    },
   ): Promise<CourtBooking> {
     const booking = await this.courtBookingRepo.findOne({
       where: { id: bookingId },
@@ -626,17 +635,19 @@ export class CourtBookingHandler implements IBookingHandler {
     const normStart = this.formatTime(startMin);
     const normEnd = this.formatTime(endMin);
 
-    const available = await this.isCourtAvailable(
-      booking.courtId,
-      dateStr,
-      normStart,
-      normEnd,
-      booking.id,
-    );
-    if (!available) {
-      throw new BadRequestException(
-        "Court is not available for the selected time slot",
+    if (!dto.allowOverlap) {
+      const available = await this.isCourtAvailable(
+        booking.courtId,
+        dateStr,
+        normStart,
+        normEnd,
+        booking.id,
       );
+      if (!available) {
+        throw new BadRequestException(
+          "Court is not available for the selected time slot",
+        );
+      }
     }
 
     let membership: UserLocationMembership | null = null;

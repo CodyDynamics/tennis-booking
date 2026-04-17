@@ -206,8 +206,12 @@ export class BookingsService {
    */
   async adminCreateCourtCalendarBooking(
     userId: string,
+    userRole: string | null,
     dto: AdminCreateCourtBookingDto,
   ) {
+    const allowOverlap =
+      userRole === "super_admin" &&
+      (dto as { allowOverlap?: boolean }).allowOverlap === true;
     const duration =
       dto.durationMinutes ??
       this.getDurationMinutes(dto.startTime, dto.endTime);
@@ -222,7 +226,8 @@ export class BookingsService {
       locationBookingWindowId: dto.locationBookingWindowId,
       bypassVenuePastStartCheck: true,
       adminCalendarSeriesId: dto.adminCalendarSeriesId ?? null,
-    });
+      allowOverlap,
+    } as any);
     if (dto.sendConfirmationEmail === true) {
       void this.bookingMailService.sendBookingConfirmation(
         result.id,
@@ -248,6 +253,7 @@ export class BookingsService {
    */
   async adminCreateCourtCalendarBatch(
     userId: string,
+    userRole: string | null,
     dto: AdminCreateCourtBookingBatchDto,
   ): Promise<{
     created: CreateBookingResult[];
@@ -259,6 +265,9 @@ export class BookingsService {
     const duration =
       dto.durationMinutes ??
       this.getDurationMinutes(dto.startTime, dto.endTime);
+    const allowOverlap =
+      userRole === "super_admin" &&
+      (dto as { allowOverlap?: boolean }).allowOverlap === true;
     const created: CreateBookingResult[] = [];
     const errors: { bookingDate: string; message: string }[] = [];
 
@@ -273,7 +282,8 @@ export class BookingsService {
           durationMinutes: duration,
           bypassVenuePastStartCheck: true,
           adminCalendarSeriesId: dto.adminCalendarSeriesId ?? null,
-        });
+          allowOverlap,
+        } as any);
         created.push(result);
         const court = await this.courtRepo.findOne({
           where: { id: dto.courtId },
@@ -582,7 +592,11 @@ export class BookingsService {
     return data;
   }
 
-  async adminUpdateCourtBooking(id: string, dto: AdminUpdateCourtBookingDto) {
+  async adminUpdateCourtBooking(
+    id: string,
+    dto: AdminUpdateCourtBookingDto,
+    userRole: string | null,
+  ) {
     const hasSchedule =
       dto.bookingDate != null || dto.startTime != null || dto.endTime != null;
     if (hasSchedule) {
@@ -602,7 +616,10 @@ export class BookingsService {
         bookingDate: dto.bookingDate,
         startTime: dto.startTime,
         endTime: dto.endTime,
-      });
+        allowOverlap:
+          userRole === "super_admin" &&
+          (dto as { allowOverlap?: boolean }).allowOverlap === true,
+      } as any);
       const court = await this.courtRepo.findOne({
         where: { id: before.courtId },
       });

@@ -19,4 +19,12 @@ export class AdminCreateCourtBookingDto extends CreateCourtBookingDto {
   @IsOptional()
   @IsBoolean()
   sendConfirmationEmail?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      "super_admin only: when true, allows saving even if this slot overlaps existing bookings on the same court.",
+  })
+  @IsOptional()
+  @IsBoolean()
+  allowOverlap?: boolean;
 }

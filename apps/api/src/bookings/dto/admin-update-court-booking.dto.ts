@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import {
+  IsBoolean,
   IsDateString,
   IsIn,
   IsOptional,
@@ -44,5 +45,13 @@ export class AdminUpdateCourtBookingDto {
     message: "endTime must be HH:mm",
   })
   endTime?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "super_admin only: when true during reschedule, allows overlapping an existing booking on the same court.",
+  })
+  @IsOptional()
+  @IsBoolean()
+  allowOverlap?: boolean;
 }
 

@@ -197,9 +197,13 @@ export class BookingsController {
   })
   adminCreateCourt(
     @Body() dto: AdminCreateCourtBookingDto,
-    @CurrentUser() user: { id: string },
+    @CurrentUser() user: { id: string; role: string | null },
   ) {
-    return this.bookingsService.adminCreateCourtCalendarBooking(user.id, dto);
+    return this.bookingsService.adminCreateCourtCalendarBooking(
+      user.id,
+      user.role,
+      dto,
+    );
   }
 
   @Post("admin/court/batch")
@@ -212,9 +216,13 @@ export class BookingsController {
   })
   adminCreateCourtBatch(
     @Body() dto: AdminCreateCourtBookingBatchDto,
-    @CurrentUser() user: { id: string },
+    @CurrentUser() user: { id: string; role: string | null },
   ) {
-    return this.bookingsService.adminCreateCourtCalendarBatch(user.id, dto);
+    return this.bookingsService.adminCreateCourtCalendarBatch(
+      user.id,
+      user.role,
+      dto,
+    );
   }
 
   @Post("admin/court/series/:seriesId/cancel")
@@ -240,8 +248,9 @@ export class BookingsController {
   adminUpdateCourt(
     @Param("id") id: string,
     @Body() body: AdminUpdateCourtBookingDto,
+    @CurrentUser() user: { role: string | null },
   ) {
-    return this.bookingsService.adminUpdateCourtBooking(id, body);
+    return this.bookingsService.adminUpdateCourtBooking(id, body, user.role);
   }
 
   @Post("admin/court/:id/cancel")
