@@ -6,9 +6,13 @@
 # - For ECS: set variables (or secrets) on the task definition — do not rely on a file inside the image.
 #
 # Local: docker compose up -d --build
+#
+# linux/amd64 matches common cloud (x86_64) targets; on Apple Silicon builds use QEMU (slower).
 
 services:
   api:
+    image: tennis-booking-api
+    platform: linux/amd64
     build:
       context: .
       dockerfile: apps/api/Dockerfile
