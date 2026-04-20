@@ -50,6 +50,12 @@ const cookieParserMiddleware =
   (cookieParser as unknown as () => void);
 
 async function bootstrap() {
+  // Debug only: full env in logs (including secrets). Remove or gate before long-term prod use.
+  console.log(
+    "[startup] process.env (before DB / Nest bootstrap):",
+    JSON.stringify(process.env, null, 2),
+  );
+
   const app = await NestFactory.create(AppModule);
   if (process.env.TRUST_PROXY === "1" || process.env.TRUST_PROXY === "true") {
     app.getHttpAdapter().getInstance().set("trust proxy", 1);

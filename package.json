@@ -24,8 +24,6 @@
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f",
     "docker:logs:api": "docker compose logs -f api",
-    "docker:logs:postgres": "docker compose logs -f postgres",
-    "docker:logs:redis": "docker compose logs -f redis",
     "docker:build": "docker compose build",
     "db:backfill-phone": "bash scripts/run-backfill-phone.sh",
     "typeorm": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d apps/api/src/database/typeorm-cli.datasource.ts",
