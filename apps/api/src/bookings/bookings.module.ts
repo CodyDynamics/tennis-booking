@@ -17,6 +17,7 @@ import { Court } from "../courts/entities/court.entity";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { Area } from "../areas/entities/area.entity";
 import { LocationsModule } from "../locations/locations.module";
+import { Coach } from "../coaches/entities/coach.entity";
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { LocationsModule } from "../locations/locations.module";
       LocationBookingWindow,
       Court,
       Area,
+      Coach,
     ]),
     CourtsModule,
     CoachesModule,

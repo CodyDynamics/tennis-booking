@@ -56,6 +56,19 @@ export class CoachesController {
     return this.coachesService.findDirectory(pageIndex, size);
   }
 
+  @Get("assignable")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth("JWT")
+  @ApiOperation({
+    summary:
+      "Admin assign flow: list coach profiles; optional locationId to scope by active/grace venue membership",
+  })
+  @ApiQuery({ name: "locationId", required: false, description: "Optional location UUID" })
+  @ApiResponse({ status: 200, description: "Coach list for assignment" })
+  findAssignable(@Query("locationId") locationId?: string) {
+    return this.coachesService.findAssignable(locationId);
+  }
+
   @Get(":id")
   @ApiOperation({ summary: "Get coach by id" })
   @ApiParam({ name: "id", description: "Coach UUID" })

@@ -26,6 +26,7 @@ import {
   CreateBookingResult,
 } from "./interfaces/booking-handler.interface";
 import { Court } from "../courts/entities/court.entity";
+import { Coach } from "../coaches/entities/coach.entity";
 import { BookingMailService } from "../notifications/booking-mail.service";
 import { Area } from "../areas/entities/area.entity";
 import { LocationBookingWindow } from "../locations/entities/location-booking-window.entity";
@@ -33,6 +34,7 @@ import { LocationVisibility } from "../locations/entities/location.enums";
 import { LocationsService } from "../locations/locations.service";
 import {
   CourtBooking,
+  CourtBookingType,
   CourtBookingStatus,
 } from "./entities/court-booking.entity";
 // (User/Location repos not needed yet; keep imports minimal)
@@ -57,6 +59,8 @@ export class BookingsService {
     private readonly locationsService: LocationsService,
     @InjectRepository(Court)
     private readonly courtRepo: Repository<Court>,
+    @InjectRepository(Coach)
+    private readonly coachRepo: Repository<Coach>,
     @InjectRepository(Area)
     private readonly areaRepo: Repository<Area>,
     @InjectRepository(CourtBooking)
@@ -650,6 +654,24 @@ export class BookingsService {
     return data;
   }
 
+  async listCoachCalendarBookings(userId: string, from?: string, to?: string) {
+    const coach = await this.coachRepo.findOne({ where: { userId } });
+    if (!coach) {
+      return [];
+    }
+    const qb = this.courtBookingRepo
+      .createQueryBuilder("b")
+      .leftJoinAndSelect("b.court", "court")
+      .leftJoinAndSelect("b.user", "user")
+      .leftJoinAndSelect("b.location", "location")
+      .where("b.coachId = :coachId", { coachId: coach.id })
+      .orderBy("b.bookingDate", "DESC")
+      .addOrderBy("b.startTime", "DESC");
+    if (from) qb.andWhere("b.bookingDate >= :from", { from });
+    if (to) qb.andWhere("b.bookingDate <= :to", { to });
+    return qb.getMany();
+  }
+
   async adminUpdateCourtBooking(
     id: string,
     dto: AdminUpdateCourtBookingDto,
@@ -704,6 +726,12 @@ export class BookingsService {
     }
     if (dto.paymentStatus !== undefined) {
       row.paymentStatus = dto.paymentStatus as any;
+    }
+    if (dto.coachId !== undefined) {
+      row.coachId = dto.coachId && dto.coachId.trim() ? dto.coachId : null;
+      row.bookingType = row.coachId
+        ? CourtBookingType.COURT_COACH
+        : CourtBookingType.COURT_ONLY;
     }
     await this.courtBookingRepo.save(row);
     return row;

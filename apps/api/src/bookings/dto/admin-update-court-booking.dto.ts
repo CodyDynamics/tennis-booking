@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsString,
   Matches,
+  IsUUID,
 } from "class-validator";
 
 export class AdminUpdateCourtBookingDto {
@@ -45,6 +46,15 @@ export class AdminUpdateCourtBookingDto {
     message: "endTime must be HH:mm",
   })
   endTime?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Assign booking to a coach profile (coach.id). Set null/empty to unassign.",
+    nullable: true,
+  })
+  @IsOptional()
+  @IsUUID()
+  coachId?: string | null;
 
   @ApiPropertyOptional({
     description:

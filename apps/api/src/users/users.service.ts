@@ -18,6 +18,7 @@ import { UserLocationMembership } from "../memberships/entities/user-location-me
 import { MembershipStatus } from "../memberships/entities/membership.enums";
 import { Location } from "../locations/entities/location.entity";
 import { Area } from "../areas/entities/area.entity";
+import { Coach } from "../coaches/entities/coach.entity";
 
 function sanitizeUser<T extends Partial<User>>(
   user: T,
@@ -28,9 +29,7 @@ function sanitizeUser<T extends Partial<User>>(
   return rest as Omit<T, "passwordHash">;
 }
 
-function membershipYmd(
-  d: Date | string | null | undefined,
-): string | null {
+function membershipYmd(d: Date | string | null | undefined): string | null {
   if (d === null || d === undefined) return null;
   const x = d instanceof Date ? d : new Date(d);
   if (Number.isNaN(x.getTime())) return null;
@@ -64,8 +63,40 @@ export class UsersService {
     private locationRepo: Repository<Location>,
     @InjectRepository(Area)
     private areaRepo: Repository<Area>,
+    @InjectRepository(Coach)
+    private coachRepo: Repository<Coach>,
     private rolesService: RolesService,
   ) {}
+
+  /**
+   * Keep coach profile table aligned with RBAC role:
+   * - role=coach => ensure a coaches row exists
+   * - role!=coach => remove orphan coaches row if any
+   */
+  private async syncCoachProfileByRole(
+    userId: string,
+    roleId: string | null | undefined,
+  ) {
+    if (!roleId) return;
+    const role = await this.rolesService.findOne(roleId);
+    const existingCoach = await this.coachRepo.findOne({ where: { userId } });
+    if (role.name === "coach") {
+      if (!existingCoach) {
+        await this.coachRepo.save(
+          this.coachRepo.create({
+            userId,
+            experienceYears: 0,
+            bio: null,
+            hourlyRate: "0",
+          }),
+        );
+      }
+      return;
+    }
+    if (existingCoach) {
+      await this.coachRepo.delete({ userId });
+    }
+  }
 
   private async memberLocationIdsForUser(userId: string): Promise<string[]> {
     const rows = await this.membershipRepo.find({ where: { userId } });
@@ -394,7 +425,9 @@ export class UsersService {
     if (dto.email !== undefined) {
       const next = dto.email.trim().toLowerCase();
       if (next !== user.email.toLowerCase()) {
-        const existing = await this.userRepo.findOne({ where: { email: next } });
+        const existing = await this.userRepo.findOne({
+          where: { email: next },
+        });
         if (existing) {
           throw new BadRequestException("Email already in use");
         }
@@ -490,6 +523,7 @@ export class UsersService {
         }),
       );
     }
+    await this.syncCoachProfileByRole(user.id, user.roleId);
     const withRole = await this.userRepo.findOne({
       where: { id: user.id },
       relations: ["role"],
@@ -550,6 +584,7 @@ export class UsersService {
         }),
       );
     }
+    await this.syncCoachProfileByRole(user.id, user.roleId);
     const withRole = await this.userRepo.findOne({
       where: { id: user.id },
       relations: ["role"],
@@ -592,6 +627,7 @@ export class UsersService {
       updates.passwordHash = await bcrypt.hash(dto.password, 10);
     }
     await this.userRepo.update(id, updates);
+    await this.syncCoachProfileByRole(id, dto.roleId ?? user.roleId);
 
     if (dto.membershipLocationId !== undefined) {
       if (

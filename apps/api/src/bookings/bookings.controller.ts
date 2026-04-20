@@ -187,6 +187,20 @@ export class BookingsController {
     return this.bookingsService.adminListCourtBookings(query);
   }
 
+  @Get("coach/calendar")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth("JWT")
+  @ApiOperation({ summary: "Coach calendar: list court bookings assigned to me" })
+  @ApiQuery({ name: "from", required: false, description: "From date (YYYY-MM-DD)" })
+  @ApiQuery({ name: "to", required: false, description: "To date (YYYY-MM-DD)" })
+  coachCalendar(
+    @CurrentUser() user: { id: string },
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+  ) {
+    return this.bookingsService.listCoachCalendarBookings(user.id, from, to);
+  }
+
   @Post("admin/court")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermission("bookings:update")

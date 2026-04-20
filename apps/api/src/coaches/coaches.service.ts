@@ -5,6 +5,7 @@ import { buildListResponse, ListResponse } from "@app/common";
 import { Coach } from "./entities/coach.entity";
 import { CreateCoachDto } from "./dto/create-coach.dto";
 import { UpdateCoachDto } from "./dto/update-coach.dto";
+import { MembershipStatus } from "../memberships/entities/membership.enums";
 
 @Injectable()
 export class CoachesService {
@@ -59,6 +60,30 @@ export class CoachesService {
       where: { userId },
       relations: { user: true },
     });
+  }
+
+  /**
+   * Admin assign flow: list coach profiles, optionally scoped by venue membership.
+   */
+  async findAssignable(locationId?: string): Promise<Coach[]> {
+    const qb = this.coachRepo
+      .createQueryBuilder("coach")
+      .leftJoinAndSelect("coach.user", "user")
+      .orderBy("user.fullName", "ASC");
+
+    if (locationId) {
+      qb.innerJoin(
+        "user_location_memberships",
+        "ulm",
+        "ulm.userId = coach.userId AND ulm.locationId = :locationId AND ulm.status IN (:...activeStatuses)",
+        {
+          locationId,
+          activeStatuses: [MembershipStatus.ACTIVE, MembershipStatus.GRACE],
+        },
+      );
+    }
+
+    return qb.distinct(true).getMany();
   }
 
   async update(id: string, dto: UpdateCoachDto) {
