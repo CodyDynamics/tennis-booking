@@ -60,6 +60,8 @@ export class AuthController {
   ) {
     const opts = this.getCookieOpts();
     const secure = this.configService.get<boolean>("cookie.secure", false);
+    const domain = this.configService.get<string | undefined>("cookie.domain");
+    const withDomain = domain ? { ...opts, domain } : opts;
     const accessName = this.configService.get<string>(
       "cookie.accessTokenName",
       "access_token",
@@ -78,12 +80,12 @@ export class AuthController {
     );
     const refreshMaxAge = rememberMe ? 30 * 24 * 60 * 60 : defaultRefreshMaxAge;
     res.cookie(accessName, accessToken, {
-      ...opts,
+      ...withDomain,
       secure,
       maxAge: accessMaxAge * 1000,
     });
     res.cookie(refreshName, refreshToken, {
-      ...opts,
+      ...withDomain,
       secure,
       maxAge: refreshMaxAge * 1000,
     });
@@ -108,6 +110,8 @@ export class AuthController {
 
   private clearAuthCookies(res: Response) {
     const opts = this.getCookieOpts();
+    const domain = this.configService.get<string | undefined>("cookie.domain");
+    const withDomain = domain ? { ...opts, domain } : opts;
     const secure = this.configService.get<boolean>("cookie.secure", false);
     const accessName = this.configService.get<string>(
       "cookie.accessTokenName",
@@ -117,8 +121,8 @@ export class AuthController {
       "cookie.refreshTokenName",
       "refresh_token",
     );
-    res.cookie(accessName, "", { ...opts, secure, maxAge: 0 });
-    res.cookie(refreshName, "", { ...opts, secure, maxAge: 0 });
+    res.cookie(accessName, "", { ...withDomain, secure, maxAge: 0 });
+    res.cookie(refreshName, "", { ...withDomain, secure, maxAge: 0 });
   }
 
   @Post("register/request-otp")

@@ -64,6 +64,8 @@ export default () => ({
       return cookieSameSiteFromEnv(secure);
     })(),
     secure: cookieSecureFromEnv(),
+    /** e.g. `.example.com` so `app` and `api` subdomains share auth cookies */
+    domain: process.env.COOKIE_DOMAIN?.trim() || undefined,
   },
   auth: {
     /** When "true": login uses email OTP after password. Default: false (email + password only). */
